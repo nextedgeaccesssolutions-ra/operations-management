@@ -9,9 +9,25 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <!-- Google API Client Library -->
-    <script src="https://apis.google.com/js/api.js"></script>
-    <script src="https://accounts.google.com/gsi/client"></script>
+    <!-- Google API Client Library - Load asynchronously -->
+    <script>
+      // Global flag to track Google API loading status
+      window.googleApiLoading = {
+        gapiLoaded: false,
+        gisLoaded: false,
+        onError: null
+      };
+      
+      // Global error handler for script loading failures
+      window.addEventListener('error', function(event) {
+        if (event.filename && (event.filename.includes('google') || event.filename.includes('gapi'))) {
+          console.error('Google API script failed to load:', event.message);
+          window.googleApiLoading.onError = event.message;
+        }
+      });
+    </script>
+    <script src="https://apis.google.com/js/api.js" async defer onload="window.googleApiLoading.gapiLoaded = true"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer onload="window.googleApiLoading.gisLoaded = true"></script>
     <style>
       /* 内联样式确保主题色立即生效，避免闪烁 */
       html,

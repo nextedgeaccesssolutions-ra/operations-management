@@ -91,3 +91,12 @@ interface ImportMeta {
     [key: string]: string | undefined;
   };
 }
+
+// Extend Window interface for Google API loading status
+interface Window {
+  googleApiLoading?: {
+    gapiLoaded: boolean;
+    gisLoaded: boolean;
+    onError: string | null;
+  };
+}

@@ -813,37 +813,27 @@ function LiveOpsCenter() {
   useEffect(() => {
     const initGoogle = async () => {
       try {
-        // Check if Google API scripts are loaded
+        // Wait for scripts to load (with timeout)
+        const startTime = Date.now();
+        while (!isGoogleApiLoaded() && Date.now() - startTime < 10000) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
         if (!isGoogleApiLoaded()) {
-          console.log('Google API scripts not loaded yet, waiting...');
-          // Wait a bit for scripts to load
-          setTimeout(async () => {
-            if (isGoogleApiLoaded()) {
-              setGoogleApiReady(true);
-              try {
-                await initializeGapi();
-                if (isClientIdConfigured()) {
-                  await initializeGis();
-                  if (isAuthenticated()) {
-                    setGoogleConnected(true);
-                    const email = await getUserEmail();
-                    setUserEmail(email);
-                    await loadRealEmails();
-                    setActiveTab('emails');
-                  }
-                }
-              } catch (initError) {
-                console.error('Failed to initialize Google API:', initError);
-              }
-            }
-          }, 1000);
+          console.error('Google API scripts failed to load within 10 seconds');
+          setGoogleApiReady(false);
           return;
         }
 
         setGoogleApiReady(true);
         
         // Initialize gapi client
-        await initializeGapi();
+        try {
+          await initializeGapi();
+        } catch (gapiError: any) {
+          console.error('Failed to initialize GAPI:', gapiError);
+          return;
+        }
         
         // Check if gapi is ready after initialization
         if (!isGapiReady()) {
@@ -852,18 +842,27 @@ function LiveOpsCenter() {
         }
         
         if (isClientIdConfigured()) {
-          await initializeGis();
+          try {
+            await initializeGis();
+          } catch (gisError: any) {
+            console.error('Failed to initialize GIS:', gisError);
+            return;
+          }
           
           // Check if already authenticated
           if (isAuthenticated()) {
             setGoogleConnected(true);
-            const email = await getUserEmail();
-            setUserEmail(email);
-            await loadRealEmails();
-            setActiveTab('emails');
+            try {
+              const email = await getUserEmail();
+              setUserEmail(email);
+              await loadRealEmails();
+              setActiveTab('emails');
+            } catch (emailError: any) {
+              console.error('Failed to load user email or emails:', emailError);
+            }
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Google API init error:', err);
       }
     };

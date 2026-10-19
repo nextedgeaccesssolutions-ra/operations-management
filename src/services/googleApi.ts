@@ -47,9 +47,48 @@ export interface Email {
 }
 
 /**
+ * Wait for Google API scripts to load
+ */
+function waitForScripts(maxWait: number = 10000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    
+    const check = () => {
+      const loading = window.googleApiLoading;
+      
+      // Check if scripts are loaded
+      if (loading?.gapiLoaded && loading?.gisLoaded) {
+        resolve();
+        return;
+      }
+      
+      // Check for errors
+      if (loading?.onError) {
+        reject(new Error(`Google API script failed to load: ${loading.onError}`));
+        return;
+      }
+      
+      // Check timeout
+      if (Date.now() - startTime > maxWait) {
+        reject(new Error('Google API scripts failed to load. Please check your internet connection and refresh the page.'));
+        return;
+      }
+      
+      // Try again in 100ms
+      setTimeout(check, 100);
+    };
+    
+    check();
+  });
+}
+
+/**
  * Initialize Google API client
  */
 export async function initializeGapi(): Promise<void> {
+  // Wait for scripts to load
+  await waitForScripts();
+  
   return new Promise((resolve, reject) => {
     // Check if gapi is loaded
     if (typeof gapi === 'undefined') {
@@ -58,22 +97,26 @@ export async function initializeGapi(): Promise<void> {
     }
 
     // Load gapi client
-    gapi.load(async () => {
-      try {
-        // Initialize the client with discovery docs
-        await gapi.client.init({
-          discoveryDocs: [
-            'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest',
-            'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest',
-          ],
-        });
-        gapiInited = true;
-        resolve();
-      } catch (error: any) {
-        console.error('GAPI init error:', error);
-        reject(new Error(error.message || 'Failed to initialize Google API client'));
-      }
-    });
+    try {
+      gapi.load(async () => {
+        try {
+          // Initialize the client with discovery docs
+          await gapi.client.init({
+            discoveryDocs: [
+              'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest',
+              'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest',
+            ],
+          });
+          gapiInited = true;
+          resolve();
+        } catch (error: any) {
+          console.error('GAPI init error:', error);
+          reject(new Error(error.message || 'Failed to initialize Google API client'));
+        }
+      });
+    } catch (error: any) {
+      reject(new Error(error.message || 'Failed to load Google API client'));
+    }
   });
 }
 
@@ -88,7 +131,8 @@ export function isGapiReady(): boolean {
  * Check if Google API scripts are loaded
  */
 export function isGoogleApiLoaded(): boolean {
-  return typeof gapi !== 'undefined' && typeof google !== 'undefined' && !!google.accounts;
+  const loading = window.googleApiLoading;
+  return !!(loading?.gapiLoaded && loading?.gisLoaded);
 }
 
 /**
@@ -110,7 +154,15 @@ export function isClientIdConfigured(): boolean {
  * Initialize Google Identity Services
  */
 export function initializeGis(): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
+    // Wait for scripts to load
+    try {
+      await waitForScripts();
+    } catch (error: any) {
+      reject(error);
+      return;
+    }
+
     // Check if Client ID is configured
     if (!isClientIdConfigured()) {
       reject(new Error('OAuth Client ID not configured. Please complete the Setup Wizard first.'));
