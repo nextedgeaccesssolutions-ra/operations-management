@@ -17,6 +17,19 @@ import {
 import { agenticEngine, simulateTaskProgress, simulateEmailProcessing, generateAIResponse } from './agenticEngine';
 import InterDepartmentFeed from './components/InterDepartmentFeed';
 import OfficeHub from './components/OfficeHub';
+import {
+  initializeGapi,
+  initializeGis,
+  requestToken,
+  isAuthenticated,
+  signOut,
+  fetchEmails as fetchGmailEmails,
+  sendEmail as sendGmailEmail,
+  markAsRead as markGmailAsRead,
+  getUserEmail,
+  isGoogleApiLoaded,
+  isClientIdConfigured,
+} from './services/googleApi';
 
 // ============ Status Components ============
 
@@ -127,24 +140,132 @@ function AgentDesk({ agent }: { agent: Agent }) {
   );
 }
 
-// ============ Email Monitor ============
+// ============ Email Monitor with Gmail Integration ============
 
 function EmailMonitor() {
   const [emails, setEmails] = useState<MonitoredEmail[]>(initialEmails);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [aiReply, setAiReply] = useState<string>('');
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [gmailUser, setGmailUser] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Simulate email processing every 10 seconds
+  // Check if already connected on mount
   useEffect(() => {
+    if (isGoogleApiLoaded() && isClientIdConfigured() && isAuthenticated()) {
+      setGmailConnected(true);
+      getUserEmail().then(email => setGmailUser(email)).catch(() => {});
+      loadGmailEmails();
+    }
+  }, []);
+
+  // Simulate email processing every 10 seconds (only when not connected to Gmail)
+  useEffect(() => {
+    if (gmailConnected) return;
+    
     const interval = setInterval(() => {
       setEmails(prev => prev.map(email => simulateEmailProcessing(email)));
     }, 10000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [gmailConnected]);
+
+  const loadGmailEmails = async () => {
+    try {
+      setLoading(true);
+      const gmailEmails = await fetchGmailEmails(50);
+      setEmails(gmailEmails.map(e => ({
+        id: e.id,
+        from: e.from,
+        fromEmail: e.fromEmail,
+        subject: e.subject,
+        preview: e.snippet,
+        body: e.body,
+        timestamp: new Date(e.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        status: e.unread ? 'unread' as const : 'read' as const,
+        priority: e.subject.toLowerCase().includes('urgent') ? 'urgent' as const : 'normal' as const,
+        labels: e.labels,
+        hasAttachment: false,
+        threadCount: 1,
+      })));
+    } catch (err) {
+      console.error('Error loading Gmail emails:', err);
+      setError('Failed to load emails from Gmail');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConnectGmail = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      if (!isGoogleApiLoaded()) {
+        throw new Error('Google API not loaded. Please refresh the page.');
+      }
+
+      if (!isClientIdConfigured()) {
+        throw new Error('OAuth Client ID not configured. Please check environment variables.');
+      }
+
+      await initializeGapi();
+      await initializeGis();
+      await requestToken();
+
+      if (!isAuthenticated()) {
+        throw new Error('Authentication failed. Please try again.');
+      }
+
+      const email = await getUserEmail();
+      setGmailUser(email);
+      setGmailConnected(true);
+      
+      await loadGmailEmails();
+    } catch (err: any) {
+      console.error('Gmail connection error:', err);
+      setError(err.message || 'Failed to connect to Gmail');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisconnectGmail = () => {
+    signOut();
+    setGmailConnected(false);
+    setGmailUser('');
+    setEmails(initialEmails);
+  };
 
   const handleGenerateReply = (email: MonitoredEmail) => {
     setAiReply(generateAIResponse(email));
+  };
+
+  const handleSendReply = async (email: MonitoredEmail) => {
+    if (!gmailConnected || !aiReply) return;
+    
+    try {
+      setLoading(true);
+      await sendGmailEmail(email.fromEmail, `Re: ${email.subject}`, aiReply);
+      setAiReply('');
+      setEmails(emails.map(e => e.id === email.id ? { ...e, status: 'replied' as const } : e));
+    } catch (err: any) {
+      setError('Failed to send reply: ' + (err.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMarkAsRead = async (emailId: string) => {
+    if (gmailConnected) {
+      try {
+        await markGmailAsRead(emailId);
+      } catch (err) {
+        console.error('Failed to mark as read in Gmail:', err);
+      }
+    }
+    setEmails(emails.map(e => e.id === emailId ? { ...e, status: 'read' as const } : e));
   };
 
   const unreadCount = emails.filter(e => e.status === 'unread').length;
@@ -152,6 +273,65 @@ function EmailMonitor() {
 
   return (
     <div className="space-y-4">
+      {/* Gmail Connection Status */}
+      <div className="glass-card rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30 flex items-center justify-center text-2xl">
+              📧
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Gmail Integration</h3>
+              <p className="text-[10px] text-slate-400">
+                {gmailConnected 
+                  ? `Connected as ${gmailUser}` 
+                  : 'Connect your Gmail to monitor real emails'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {gmailConnected ? (
+              <>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
+                  <span className="w-2 h-2 rounded-full bg-green-500 status-pulse" />
+                  <span className="text-[10px] text-green-400 font-medium">Connected</span>
+                </div>
+                <button
+                  onClick={handleDisconnectGmail}
+                  disabled={loading}
+                  className="px-3 py-1.5 rounded-lg text-[10px] bg-slate-700/30 border border-slate-600/30 text-slate-400 hover:bg-slate-700/50 transition-colors font-medium disabled:opacity-50"
+                >
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleConnectGmail}
+                disabled={loading}
+                className="px-4 py-2 rounded-lg text-xs bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:bg-blue-500/30 transition-colors font-medium disabled:opacity-50"
+              >
+                {loading ? '⏳ Connecting...' : '🔗 Connect Gmail'}
+              </button>
+            )}
+          </div>
+        </div>
+        {error && (
+          <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <p className="text-xs text-red-300">⚠️ {error}</p>
+          </div>
+        )}
+        {!gmailConnected && !error && (
+          <div className="mt-3 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">
+            <p className="text-[11px] text-slate-400">
+              <span className="text-blue-300 font-medium">💡 Tip:</span> Connect your Gmail account to monitor real emails from{' '}
+              <span className="text-blue-300 font-mono">info.nextedgeaccesssolutions@gmail.com</span> and{' '}
+              <span className="text-blue-300 font-mono">nextedgeaccesssolutions@gmail.com</span>. 
+              You can read, reply, and manage emails directly from this dashboard.
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         <div className="glass-card rounded-xl p-4">
@@ -238,7 +418,7 @@ function EmailMonitor() {
                       🤖 Generate AI Reply
                     </button>
                     <button
-                      onClick={() => setEmails(emails.map(e => e.id === email.id ? { ...e, status: 'read' as const } : e))}
+                      onClick={() => handleMarkAsRead(email.id)}
                       className="px-3 py-1.5 rounded-lg text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors font-medium"
                     >
                       ✓ Mark Read
@@ -249,20 +429,47 @@ function EmailMonitor() {
                     >
                       📁 Archive
                     </button>
+                    {gmailConnected && (
+                      <button
+                        onClick={loadGmailEmails}
+                        disabled={loading}
+                        className="px-3 py-1.5 rounded-lg text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-colors font-medium disabled:opacity-50"
+                      >
+                        🔄 Refresh
+                      </button>
+                    )}
                   </div>
                   {aiReply && (
                     <div className="p-4 rounded-xl bg-green-500/5 border border-green-500/20">
                       <p className="text-[10px] text-green-400 font-medium mb-2">🤖 AI-Generated Reply:</p>
                       <p className="text-xs text-slate-300 leading-relaxed italic">"{aiReply}"</p>
-                      <button
-                        onClick={() => {
-                          setEmails(emails.map(e => e.id === email.id ? { ...e, status: 'replied' as const } : e));
-                          setAiReply('');
-                        }}
-                        className="mt-3 px-3 py-1.5 rounded-lg text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 hover:bg-green-500/30 transition-colors font-medium"
-                      >
-                        ✓ Send Reply
-                      </button>
+                      <div className="mt-3 flex items-center gap-2">
+                        {gmailConnected ? (
+                          <button
+                            onClick={() => handleSendReply(email)}
+                            disabled={loading}
+                            className="px-3 py-1.5 rounded-lg text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 hover:bg-green-500/30 transition-colors font-medium disabled:opacity-50"
+                          >
+                            {loading ? '⏳ Sending...' : '📤 Send via Gmail'}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEmails(emails.map(e => e.id === email.id ? { ...e, status: 'replied' as const } : e));
+                              setAiReply('');
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 hover:bg-green-500/30 transition-colors font-medium"
+                          >
+                            ✓ Mark as Replied
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setAiReply('')}
+                          className="px-3 py-1.5 rounded-lg text-[10px] bg-slate-700/30 text-slate-400 border border-slate-600/30 hover:bg-slate-700/50 transition-colors font-medium"
+                        >
+                          ✕ Cancel
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
