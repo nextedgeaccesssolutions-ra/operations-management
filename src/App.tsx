@@ -811,33 +811,44 @@ function LiveOpsCenter() {
 
   // Initialize Google API on mount
   useEffect(() => {
+    let cancelled = false;
+    
     const initGoogle = async () => {
       try {
         // Wait for scripts to load (with timeout)
         const startTime = Date.now();
-        while (!isGoogleApiLoaded() && Date.now() - startTime < 10000) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+        while (!isGoogleApiLoaded() && Date.now() - startTime < 15000) {
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
 
-        if (!isGoogleApiLoaded()) {
-          console.error('Google API scripts failed to load within 10 seconds');
+        if (cancelled) return;
+
+        // Check if scripts loaded (either via onload or globals exist)
+        const scriptsLoaded = isGoogleApiLoaded();
+        
+        if (!scriptsLoaded) {
+          console.warn('Google API scripts not loaded after 15s - user can still use demo mode');
           setGoogleApiReady(false);
           return;
         }
 
+        if (cancelled) return;
         setGoogleApiReady(true);
         
-        // Initialize gapi client
+        // Initialize gapi client (this calls gapi.load('client', callback))
         try {
           await initializeGapi();
         } catch (gapiError: any) {
-          console.error('Failed to initialize GAPI:', gapiError);
+          console.error('Failed to initialize GAPI:', gapiError?.message || gapiError);
+          // Don't return - user can still see the UI and try to connect manually
           return;
         }
         
+        if (cancelled) return;
+        
         // Check if gapi is ready after initialization
         if (!isGapiReady()) {
-          console.error('Google API client not ready after initialization');
+          console.warn('Google API client not ready after initialization');
           return;
         }
         
@@ -845,29 +856,36 @@ function LiveOpsCenter() {
           try {
             await initializeGis();
           } catch (gisError: any) {
-            console.error('Failed to initialize GIS:', gisError);
+            console.error('Failed to initialize GIS:', gisError?.message || gisError);
             return;
           }
+          
+          if (cancelled) return;
           
           // Check if already authenticated
           if (isAuthenticated()) {
             setGoogleConnected(true);
             try {
               const email = await getUserEmail();
-              setUserEmail(email);
-              await loadRealEmails();
-              setActiveTab('emails');
+              if (!cancelled) {
+                setUserEmail(email);
+                await loadRealEmails();
+                setActiveTab('emails');
+              }
             } catch (emailError: any) {
-              console.error('Failed to load user email or emails:', emailError);
+              console.error('Failed to load user email or emails:', emailError?.message || emailError);
             }
           }
         }
       } catch (err: any) {
-        console.error('Google API init error:', err);
+        // Catch-all for any unexpected errors during initialization
+        console.error('Google API init error:', err?.message || err);
       }
     };
 
     initGoogle();
+    
+    return () => { cancelled = true; };
   }, []);
 
   const handleConnectGoogle = async () => {
@@ -877,39 +895,43 @@ function LiveOpsCenter() {
       
       // Check if Google API scripts are loaded
       if (!isGoogleApiLoaded()) {
-        setError('Google API scripts are still loading. Please wait a moment and try again.');
-        setLoading(false);
-        return;
-      }
-      
-      // Check if gapi client is ready
-      if (!isGapiReady()) {
-        setError('Google API client is not ready. Please refresh the page and try again.');
+        setError('Google API scripts are still loading. Please wait a few seconds and try again.');
         setLoading(false);
         return;
       }
       
       // Check if client ID is configured
       if (!isClientIdConfigured()) {
-        setError('OAuth Client ID not configured. Please complete the Setup Wizard first to get your Client ID from Google Cloud Console.');
+        setError('OAuth Client ID not configured. Please complete the Setup Wizard first.');
         setActiveTab('setup');
         setLoading(false);
         return;
+      }
+      
+      // Initialize gapi client if not already done
+      if (!isGapiReady()) {
+        try {
+          await initializeGapi();
+        } catch (initErr: any) {
+          setError('Failed to initialize Google API. Please refresh the page and try again.');
+          setLoading(false);
+          return;
+        }
       }
       
       // Initialize GIS if not already done
       try {
         await initializeGis();
       } catch (initErr: any) {
-        setError(initErr.message || 'Failed to initialize Google services');
+        setError(initErr?.message || 'Failed to initialize Google services. Please refresh the page.');
         setLoading(false);
         return;
       }
       
-      // Request token - this will open the Google auth popup
-      // Add a small delay to ensure UI updates before popup opens
+      // Small delay to ensure UI updates before popup opens
       await new Promise(resolve => setTimeout(resolve, 100));
       
+      // Request token - this will open the Google auth popup
       await requestToken();
       
       // Verify we got a token
@@ -920,17 +942,27 @@ function LiveOpsCenter() {
       setGoogleConnected(true);
       
       // Get user email
-      const email = await getUserEmail();
-      setUserEmail(email);
+      try {
+        const email = await getUserEmail();
+        setUserEmail(email);
+      } catch (emailErr: any) {
+        console.warn('Could not get user email:', emailErr?.message || emailErr);
+        // Continue anyway - we're still connected
+      }
       
       // Load emails
-      await loadRealEmails();
+      try {
+        await loadRealEmails();
+      } catch (loadErr: any) {
+        console.warn('Could not load emails:', loadErr?.message || loadErr);
+        // Continue anyway - we're still connected
+      }
       
       // Switch to emails tab
       setActiveTab('emails');
       
     } catch (err: any) {
-      const errorMessage = err.message || 'Failed to connect to Google';
+      const errorMessage = err?.message || 'Failed to connect to Google';
       
       // Provide helpful error messages
       if (errorMessage.includes('popup') || errorMessage.includes('blocked')) {
@@ -942,8 +974,11 @@ function LiveOpsCenter() {
         setActiveTab('setup');
       } else if (errorMessage.includes('timeout')) {
         setError('Connection timed out. Please check your internet connection and try again.');
-      } else if (errorMessage.includes('popup_closed')) {
+      } else if (errorMessage.includes('popup_closed') || errorMessage.includes('popup_closed_by_user')) {
         setError('Authentication window was closed. Please try again.');
+      } else if (errorMessage.includes('Script error')) {
+        // This is the cross-origin error - just tell user to refresh
+        setError('A script error occurred. Please refresh the page and try again.');
       } else {
         setError(errorMessage);
       }

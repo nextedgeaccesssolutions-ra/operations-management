@@ -47,35 +47,37 @@ export interface Email {
 }
 
 /**
- * Wait for Google API scripts to load
+ * Wait for Google API scripts to load in the DOM.
+ * NOTE: "[Script error.]" from cross-origin scripts is NORMAL and NOT a failure.
+ * We only wait for the script tag's onload event.
  */
-function waitForScripts(maxWait: number = 10000): Promise<void> {
+function waitForScripts(maxWait: number = 15000): Promise<void> {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
     const check = () => {
       const loading = window.googleApiLoading;
       
-      // Check if scripts are loaded
+      // Scripts loaded successfully via onload events
       if (loading?.gapiLoaded && loading?.gisLoaded) {
         resolve();
         return;
       }
       
-      // Check for errors
-      if (loading?.onError) {
-        reject(new Error(`Google API script failed to load: ${loading.onError}`));
-        return;
-      }
-      
       // Check timeout
       if (Date.now() - startTime > maxWait) {
+        // Even on timeout, check if gapi/google are available (scripts may have loaded without firing onload)
+        if (typeof gapi !== 'undefined' && typeof google !== 'undefined') {
+          console.warn('Google API scripts available but onload not fired - proceeding anyway');
+          resolve();
+          return;
+        }
         reject(new Error('Google API scripts failed to load. Please check your internet connection and refresh the page.'));
         return;
       }
       
-      // Try again in 100ms
-      setTimeout(check, 100);
+      // Try again in 200ms
+      setTimeout(check, 200);
     };
     
     check();
@@ -83,7 +85,9 @@ function waitForScripts(maxWait: number = 10000): Promise<void> {
 }
 
 /**
- * Initialize Google API client
+ * Initialize Google API client.
+ * CRITICAL: Must call gapi.load('client', callback) - the 'client' argument is REQUIRED
+ * to load the client library. Without it, gapi.client is undefined.
  */
 export async function initializeGapi(): Promise<void> {
   // Wait for scripts to load
@@ -96,10 +100,17 @@ export async function initializeGapi(): Promise<void> {
       return;
     }
 
-    // Load gapi client
     try {
-      gapi.load(async () => {
+      // CRITICAL FIX: Must pass 'client' as first argument to load the client library
+      // Without 'client', gapi.client will be undefined
+      gapi.load('client', async () => {
         try {
+          // Verify gapi.client exists after loading
+          if (!gapi.client) {
+            reject(new Error('gapi.client is undefined after load. Please refresh the page.'));
+            return;
+          }
+
           // Initialize the client with discovery docs
           await gapi.client.init({
             discoveryDocs: [
@@ -110,11 +121,12 @@ export async function initializeGapi(): Promise<void> {
           gapiInited = true;
           resolve();
         } catch (error: any) {
-          console.error('GAPI init error:', error);
+          console.error('GAPI client init error:', error);
           reject(new Error(error.message || 'Failed to initialize Google API client'));
         }
       });
     } catch (error: any) {
+      console.error('gapi.load error:', error);
       reject(new Error(error.message || 'Failed to load Google API client'));
     }
   });
@@ -128,11 +140,17 @@ export function isGapiReady(): boolean {
 }
 
 /**
- * Check if Google API scripts are loaded
+ * Check if Google API scripts are loaded in the DOM
  */
 export function isGoogleApiLoaded(): boolean {
+  // Check our loading flags first
   const loading = window.googleApiLoading;
-  return !!(loading?.gapiLoaded && loading?.gisLoaded);
+  if (loading?.gapiLoaded && loading?.gisLoaded) {
+    return true;
+  }
+  
+  // Fallback: check if the globals exist (scripts may have loaded without firing onload)
+  return typeof gapi !== 'undefined' && typeof google !== 'undefined' && !!google.accounts;
 }
 
 /**
@@ -151,7 +169,7 @@ export function isClientIdConfigured(): boolean {
 }
 
 /**
- * Initialize Google Identity Services
+ * Initialize Google Identity Services (GIS)
  */
 export function initializeGis(): Promise<void> {
   return new Promise(async (resolve, reject) => {
@@ -169,46 +187,49 @@ export function initializeGis(): Promise<void> {
       return;
     }
 
-    // Check if Google scripts are loaded
-    if (typeof google === 'undefined' || !google.accounts) {
-      reject(new Error('Google Identity Services not loaded. Please refresh the page or check your internet connection.'));
+    // Check if Google Identity Services is loaded
+    if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+      reject(new Error('Google Identity Services not loaded. Please refresh the page.'));
       return;
     }
 
     try {
-      // Initialize token client (callback is just for initialization confirmation)
+      // Initialize token client
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: SCOPES,
         callback: (response: any) => {
-          // This callback is called after initialization
+          // This callback is called after each token request
           if (response.error) {
-            console.error('GIS init error:', response.error);
+            console.error('GIS callback error:', response.error);
           } else {
             gisInited = true;
           }
         },
       });
       
-      // Resolve immediately after creating the client
+      // Mark as initialized (token client created successfully)
+      gisInited = true;
       resolve();
     } catch (error: any) {
+      console.error('GIS init error:', error);
       reject(new Error(error.message || 'Failed to initialize Google Identity Services'));
     }
   });
 }
 
 /**
- * Request OAuth token
+ * Request OAuth token - opens Google sign-in popup
  */
 export function requestToken(): Promise<void> {
   return new Promise((resolve, reject) => {
+    // Verify token client exists
     if (!tokenClient) {
       reject(new Error('Token client not initialized. Please refresh the page and try again.'));
       return;
     }
 
-    // Check if gapi.client is available
+    // Verify gapi.client exists before accessing it
     if (typeof gapi === 'undefined' || !gapi.client) {
       reject(new Error('Google API client not ready. Please refresh the page and try again.'));
       return;
@@ -224,17 +245,29 @@ export function requestToken(): Promise<void> {
       clearTimeout(timeoutId);
       
       if (response.error) {
-        reject(new Error(response.error_description || 'Authentication failed'));
+        const errorMsg = response.error_description || response.error || 'Authentication failed';
+        reject(new Error(errorMsg));
       } else {
-        // Token received successfully
-        gapi.client.setToken(response);
+        // Token received successfully - set it on gapi.client
+        try {
+          gapi.client.setToken(response);
+        } catch (e) {
+          console.warn('Failed to set token on gapi.client:', e);
+        }
         resolve();
       }
     };
 
     try {
-      // Request the token - this will trigger the callback
-      const currentToken = gapi.client.getToken();
+      // Request the token - this will trigger the callback and open the popup
+      let currentToken = null;
+      try {
+        currentToken = gapi.client.getToken();
+      } catch (e) {
+        // getToken might throw if client isn't fully ready
+        currentToken = null;
+      }
+      
       if (currentToken === null) {
         tokenClient.requestAccessToken({ prompt: 'consent' });
       } else {
@@ -251,22 +284,34 @@ export function requestToken(): Promise<void> {
  * Check if user is authenticated
  */
 export function isAuthenticated(): boolean {
-  return gapiInited && gisInited && typeof gapi !== 'undefined' && gapi.client !== undefined && gapi.client.getToken() !== null;
+  try {
+    return gapiInited && 
+           gisInited && 
+           typeof gapi !== 'undefined' && 
+           gapi.client !== undefined && 
+           gapi.client.getToken() !== null;
+  } catch (e) {
+    return false;
+  }
 }
 
 /**
  * Sign out
  */
 export function signOut(): void {
-  if (typeof gapi === 'undefined' || !gapi.client) {
-    return;
-  }
-  
-  const token = gapi.client.getToken();
-  if (token) {
-    google.accounts.oauth2.revoke(token.access_token);
+  try {
+    if (typeof gapi === 'undefined' || !gapi.client) {
+      return;
+    }
+    
+    const token = gapi.client.getToken();
+    if (token && typeof google !== 'undefined' && google.accounts?.oauth2) {
+      google.accounts.oauth2.revoke(token.access_token);
+    }
     gapi.client.setToken('');
     gisInited = false;
+  } catch (e) {
+    console.warn('Error during sign out:', e);
   }
 }
 
@@ -278,6 +323,10 @@ export async function fetchEmails(
   query: string = ''
 ): Promise<Email[]> {
   try {
+    if (typeof gapi === 'undefined' || !gapi.client?.gmail) {
+      throw new Error('Gmail API not ready');
+    }
+
     const response = await gapi.client.gmail.users.messages.list({
       userId: 'me',
       maxResults,
@@ -350,6 +399,10 @@ export async function sendEmail(
   threadId?: string
 ): Promise<void> {
   try {
+    if (typeof gapi === 'undefined' || !gapi.client?.gmail) {
+      throw new Error('Gmail API not ready');
+    }
+
     // Create email message
     const email = [
       `To: ${to}`,
@@ -386,6 +439,10 @@ export async function sendEmail(
  */
 export async function markAsRead(messageId: string): Promise<void> {
   try {
+    if (typeof gapi === 'undefined' || !gapi.client?.gmail) {
+      throw new Error('Gmail API not ready');
+    }
+
     await gapi.client.gmail.users.messages.modify({
       userId: 'me',
       id: messageId,
@@ -407,6 +464,10 @@ export async function fetchSheetData(
   range: string = 'A1:Z1000'
 ): Promise<any[][]> {
   try {
+    if (typeof gapi === 'undefined' || !gapi.client?.sheets) {
+      throw new Error('Sheets API not ready');
+    }
+
     const response = await gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId,
       range,
@@ -414,7 +475,7 @@ export async function fetchSheetData(
 
     return response.result.values || [];
   } catch (error) {
-    console.error('Error fetching sheet data:', error);
+    console.error('Error fetching sheet ', error);
     throw error;
   }
 }
@@ -424,6 +485,10 @@ export async function fetchSheetData(
  */
 export async function getUserEmail(): Promise<string> {
   try {
+    if (typeof gapi === 'undefined' || !gapi.client?.gmail) {
+      throw new Error('Gmail API not ready');
+    }
+
     const response = await gapi.client.gmail.users.getProfile({
       userId: 'me',
     });

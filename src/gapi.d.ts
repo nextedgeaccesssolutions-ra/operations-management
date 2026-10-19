@@ -74,8 +74,9 @@ interface GoogleAccountsOauth2 {
   revoke(token: string): void;
 }
 
+// CORRECT Google API signature: gapi.load('client', callback)
 declare const gapi: {
-  load(callback: () => void): void;
+  load(names: string, callback: () => void): void;
   client: GapiClient;
 };
 
