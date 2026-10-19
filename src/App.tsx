@@ -9,11 +9,18 @@ import {
   activityFeed,
   officeRooms,
   signOffDepartments,
+  monitoredEmails as initialEmails,
+  adminLogs as initialAdminLogs,
+  ADMIN_EMAIL,
   type Agent,
   type Task,
   type Department,
   type ChatMessage,
   type PresenceStatus,
+  type MonitoredEmail,
+  type AdminLog,
+  type TaskStatus,
+  type TaskPriority,
 } from './data';
 
 // ============ Status Components ============
@@ -78,17 +85,34 @@ function PresenceSelector({ presence, onChange }: { presence: PresenceStatus; on
 
 // ============ Task Components ============
 
-function TaskStatusBadge({ status }: { status: Task['status'] }) {
-  const config = {
+function TaskStatusBadge({ status }: { status: TaskStatus }) {
+  const config: Record<TaskStatus, { bg: string; icon: string; label: string }> = {
     running: { bg: 'bg-blue-500/20 text-blue-300 border-blue-500/30', icon: '▶', label: 'Running' },
     queued: { bg: 'bg-slate-500/20 text-slate-300 border-slate-500/30', icon: '◻', label: 'Queued' },
     blocked: { bg: 'bg-red-500/20 text-red-300 border-red-500/30', icon: '⊘', label: 'Blocked' },
     'awaiting-sign-off': { bg: 'bg-amber-500/20 text-amber-300 border-amber-500/30', icon: '⏳', label: 'Awaiting sign-off' },
+    completed: { bg: 'bg-green-500/20 text-green-300 border-green-500/30', icon: '✓', label: 'Completed' },
+    cancelled: { bg: 'bg-gray-500/20 text-gray-400 border-gray-500/30', icon: '✕', label: 'Cancelled' },
   };
   const c = config[status];
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${c.bg}`}>
       <span>{c.icon}</span>
+      {c.label}
+    </span>
+  );
+}
+
+function PriorityBadge({ priority }: { priority: TaskPriority }) {
+  const config: Record<TaskPriority, { bg: string; label: string }> = {
+    critical: { bg: 'bg-red-500/20 text-red-300 border-red-500/30', label: 'Critical' },
+    high: { bg: 'bg-orange-500/20 text-orange-300 border-orange-500/30', label: 'High' },
+    medium: { bg: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30', label: 'Medium' },
+    low: { bg: 'bg-slate-500/20 text-slate-400 border-slate-500/30', label: 'Low' },
+  };
+  const c = config[priority];
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-semibold border ${c.bg}`}>
       {c.label}
     </span>
   );
@@ -699,7 +723,7 @@ function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
 
 // ============ Sidebar Navigation ============
 
-type ViewType = 'floor' | 'departments' | 'chat' | 'meetings' | 'activity';
+type ViewType = 'floor' | 'departments' | 'chat' | 'meetings' | 'activity' | 'admin';
 
 function Sidebar({ activeView, onViewChange, notificationCount }: {
   activeView: ViewType;
@@ -709,6 +733,7 @@ function Sidebar({ activeView, onViewChange, notificationCount }: {
   const items: { id: ViewType; icon: string; label: string; badge?: number }[] = [
     { id: 'floor', icon: '🏢', label: 'Floor Plan' },
     { id: 'departments', icon: '👥', label: 'Departments' },
+    { id: 'admin', icon: '🎛️', label: 'Admin Panel' },
     { id: 'chat', icon: '💬', label: 'Chat', badge: 9 },
     { id: 'meetings', icon: '📋', label: 'Meetings' },
     { id: 'activity', icon: '📊', label: 'Activity' },
@@ -757,6 +782,630 @@ function Sidebar({ activeView, onViewChange, notificationCount }: {
           <span className="text-[10px] text-slate-400">System Online</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============ Admin Controller ============
+
+type AdminTab = 'tasks' | 'email' | 'logs' | 'settings';
+
+function AdminController() {
+  const [activeTab, setActiveTab] = useState<AdminTab>('tasks');
+  const [allTasks, setAllTasks] = useState<(Task & { agentId: string; agentName: string; department: string; departmentColor: string })[]>(() => {
+    return departments.flatMap(dept =>
+      dept.agents.flatMap(agent =>
+        agent.tasks.map(task => ({
+          ...task,
+          agentId: agent.id,
+          agentName: agent.name,
+          department: dept.name,
+          departmentColor: dept.color,
+          priority: (task.gated ? 'high' : task.status === 'blocked' ? 'critical' : 'medium') as TaskPriority,
+          createdAt: 'Today',
+        }))
+      )
+    );
+  });
+  const [emails, setEmails] = useState<MonitoredEmail[]>(initialEmails);
+  const [logs, setLogs] = useState<AdminLog[]>(initialAdminLogs);
+  const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+  const [taskFilter, setTaskFilter] = useState<TaskStatus | 'all'>('all');
+  const [emailFilter, setEmailFilter] = useState<'all' | 'unread' | 'urgent'>('all');
+  const [emailConnected, setEmailConnected] = useState(true);
+  const [autoMonitor, setAutoMonitor] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const addLog = (action: string, target: string, details?: string) => {
+    const newLog: AdminLog = {
+      id: `l-${Date.now()}`,
+      action,
+      target,
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      admin: 'Admin Controller',
+      details,
+    };
+    setLogs([newLog, ...logs]);
+  };
+
+  const handleTaskAction = (taskId: string, newStatus: TaskStatus) => {
+    setAllTasks(tasks => tasks.map(t => {
+      if (t.id === taskId) {
+        addLog(
+          newStatus === 'completed' ? 'Completed' : newStatus === 'cancelled' ? 'Cancelled' : newStatus === 'running' ? 'Started' : newStatus === 'queued' ? 'Queued' : 'Updated',
+          t.title.substring(0, 40) + '...',
+          `Status changed to ${newStatus}`
+        );
+        return { ...t, status: newStatus };
+      }
+      return t;
+    }));
+  };
+
+  const handleEmailAction = (emailId: string, action: 'read' | 'reply' | 'archive' | 'flag') => {
+    setEmails(emails.map(e => {
+      if (e.id === emailId) {
+        const newStatus = action === 'read' ? 'read' as const : action === 'reply' ? 'replied' as const : action === 'archive' ? 'archived' as const : e.status;
+        addLog(
+          action === 'read' ? 'Read' : action === 'reply' ? 'Replied' : action === 'archive' ? 'Archived' : 'Flagged',
+          e.subject.substring(0, 40) + '...',
+          `Email from ${e.from}`
+        );
+        return { ...e, status: newStatus };
+      }
+      return e;
+    }));
+  };
+
+  const filteredTasks = allTasks.filter(t => {
+    if (taskFilter !== 'all' && t.status !== taskFilter) return false;
+    if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase()) && !t.assignee.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  const filteredEmails = emails.filter(e => {
+    if (emailFilter === 'unread' && e.status !== 'unread') return false;
+    if (emailFilter === 'urgent' && e.priority !== 'urgent') return false;
+    return true;
+  });
+
+  const unreadCount = emails.filter(e => e.status === 'unread').length;
+  const urgentCount = emails.filter(e => e.priority === 'urgent' && e.status !== 'archived').length;
+  const runningTasks = allTasks.filter(t => t.status === 'running').length;
+  const blockedTasks = allTasks.filter(t => t.status === 'blocked').length;
+  const awaitingSignOff = allTasks.filter(t => t.status === 'awaiting-sign-off').length;
+  const completedTasks = allTasks.filter(t => t.status === 'completed').length;
+
+  return (
+    <div className="space-y-6">
+      {/* Admin Header */}
+      <div className="glass-card rounded-2xl p-6 border-blue-500/20!">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 flex items-center justify-center text-2xl">
+              🎛️
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">Admin Controller</h2>
+              <p className="text-xs text-slate-400">Centralized task management & email monitoring</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20">
+              <span className="w-2 h-2 rounded-full bg-green-500 status-pulse" />
+              <span className="text-[10px] text-green-400 font-medium">Connected</span>
+            </div>
+            <div className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-700/50">
+              <p className="text-[10px] text-slate-500">Monitoring</p>
+              <p className="text-[11px] text-blue-300 font-mono font-medium">{ADMIN_EMAIL}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-5">
+          <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
+            <p className="text-lg font-bold text-blue-400">{runningTasks}</p>
+            <p className="text-[9px] text-slate-500 uppercase tracking-wider">Running</p>
+          </div>
+          <div className="p-3 rounded-xl bg-red-500/5 border border-red-500/20">
+            <p className="text-lg font-bold text-red-400">{blockedTasks}</p>
+            <p className="text-[9px] text-slate-500 uppercase tracking-wider">Blocked</p>
+          </div>
+          <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
+            <p className="text-lg font-bold text-amber-400">{awaitingSignOff}</p>
+            <p className="text-[9px] text-slate-500 uppercase tracking-wider">Awaiting Sign-off</p>
+          </div>
+          <div className="p-3 rounded-xl bg-green-500/5 border border-green-500/20">
+            <p className="text-lg font-bold text-green-400">{completedTasks}</p>
+            <p className="text-[9px] text-slate-500 uppercase tracking-wider">Completed</p>
+          </div>
+          <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/20">
+            <p className="text-lg font-bold text-purple-400">{unreadCount}</p>
+            <p className="text-[9px] text-slate-500 uppercase tracking-wider">Unread Emails</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1 bg-slate-800/50 rounded-xl p-1.5 border border-slate-700/50 w-fit">
+        {([
+          { id: 'tasks' as AdminTab, label: 'All Tasks', icon: '📋', count: allTasks.length },
+          { id: 'email' as AdminTab, label: 'Email Monitor', icon: '📧', count: unreadCount },
+          { id: 'logs' as AdminTab, label: 'Admin Logs', icon: '📝', count: logs.length },
+          { id: 'settings' as AdminTab, label: 'Settings', icon: '⚙️' },
+        ]).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+              activeTab === tab.id
+                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/30'
+            }`}
+          >
+            <span>{tab.icon}</span>
+            <span>{tab.label}</span>
+            {tab.count !== undefined && tab.count > 0 && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${
+                activeTab === tab.id ? 'bg-blue-500/30 text-blue-200' : 'bg-slate-700 text-slate-400'
+              }`}>
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'tasks' && (
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search tasks or assignees..."
+              className="flex-1 w-full md:w-auto bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition-colors"
+            />
+            <div className="flex items-center gap-1 flex-wrap">
+              {(['all', 'running', 'queued', 'blocked', 'awaiting-sign-off', 'completed', 'cancelled'] as const).map(status => (
+                <button
+                  key={status}
+                  onClick={() => setTaskFilter(status)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-medium transition-all ${
+                    taskFilter === status
+                      ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                      : 'text-slate-400 hover:text-slate-300 bg-slate-800/30 border border-slate-700/30'
+                  }`}
+                >
+                  {status === 'all' ? 'All' : status === 'awaiting-sign-off' ? 'Sign-off' : status.charAt(0).toUpperCase() + status.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Task Table */}
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-700/30">
+                    <th className="text-left px-4 py-3 text-[10px] text-slate-500 uppercase tracking-wider font-medium">Task</th>
+                    <th className="text-left px-4 py-3 text-[10px] text-slate-500 uppercase tracking-wider font-medium">Assignee</th>
+                    <th className="text-left px-4 py-3 text-[10px] text-slate-500 uppercase tracking-wider font-medium">Department</th>
+                    <th className="text-left px-4 py-3 text-[10px] text-slate-500 uppercase tracking-wider font-medium">Status</th>
+                    <th className="text-left px-4 py-3 text-[10px] text-slate-500 uppercase tracking-wider font-medium">Priority</th>
+                    <th className="text-left px-4 py-3 text-[10px] text-slate-500 uppercase tracking-wider font-medium">Due</th>
+                    <th className="text-right px-4 py-3 text-[10px] text-slate-500 uppercase tracking-wider font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTasks.map(task => (
+                    <tr key={task.id} className="border-b border-slate-800/30 hover:bg-slate-800/20 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {task.gated && <span className="text-amber-400 text-[10px]">🔒</span>}
+                          <p className="text-xs text-slate-200 max-w-[200px] truncate">{task.title}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs text-slate-300">{task.agentName}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border"
+                          style={{
+                            backgroundColor: `${task.departmentColor}15`,
+                            borderColor: `${task.departmentColor}30`,
+                            color: task.departmentColor,
+                          }}
+                        >
+                          {task.department}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <TaskStatusBadge status={task.status} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <PriorityBadge priority={task.priority || 'medium'} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-[11px] ${task.dueDate === 'Today' ? 'text-amber-400 font-medium' : 'text-slate-400'}`}>
+                          {task.dueDate}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 justify-end">
+                          {task.status !== 'running' && task.status !== 'completed' && task.status !== 'cancelled' && (
+                            <button
+                              onClick={() => handleTaskAction(task.id, 'running')}
+                              className="px-2 py-1 rounded text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors"
+                              title="Start"
+                            >
+                              ▶
+                            </button>
+                          )}
+                          {task.status === 'running' && (
+                            <button
+                              onClick={() => handleTaskAction(task.id, 'queued')}
+                              className="px-2 py-1 rounded text-[9px] bg-slate-500/10 text-slate-400 border border-slate-500/20 hover:bg-slate-500/20 transition-colors"
+                              title="Pause"
+                            >
+                              ⏸
+                            </button>
+                          )}
+                          {task.status === 'awaiting-sign-off' && (
+                            <button
+                              onClick={() => handleTaskAction(task.id, 'completed')}
+                              className="px-2 py-1 rounded text-[9px] bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
+                              title="Approve"
+                            >
+                              ✓
+                            </button>
+                          )}
+                          {task.status !== 'completed' && task.status !== 'cancelled' && (
+                            <button
+                              onClick={() => handleTaskAction(task.id, 'completed')}
+                              className="px-2 py-1 rounded text-[9px] bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
+                              title="Complete"
+                            >
+                              ✓
+                            </button>
+                          )}
+                          {task.status !== 'cancelled' && (
+                            <button
+                              onClick={() => handleTaskAction(task.id, 'cancelled')}
+                              className="px-2 py-1 rounded text-[9px] bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                              title="Cancel"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {filteredTasks.length === 0 && (
+              <div className="p-8 text-center">
+                <p className="text-sm text-slate-500">No tasks match your filters</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'email' && (
+        <div className="space-y-4">
+          {/* Email Connection Status */}
+          <div className="glass-card rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-red-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M1.5 8.5l10.5 7 10.5-7M2 17h20V5H2v12zm0 2h20v1H2v-1z"/>
+                </svg>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${emailConnected ? 'bg-green-500 status-pulse' : 'bg-red-500'}`} />
+                  <span className="text-xs font-medium text-white">
+                    {emailConnected ? 'IMAP Connected — Monitoring Active' : 'Disconnected'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 font-mono mt-0.5">{ADMIN_EMAIL}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <span className="text-[10px] text-amber-400 font-medium">🔴 {urgentCount} urgent</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <span className="text-[10px] text-blue-400 font-medium">📬 {unreadCount} unread</span>
+              </div>
+              <button
+                onClick={() => setEmailConnected(!emailConnected)}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-medium border transition-colors ${
+                  emailConnected
+                    ? 'bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20'
+                    : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+                }`}
+              >
+                {emailConnected ? '● Connected' : '○ Reconnect'}
+              </button>
+            </div>
+          </div>
+
+          {/* Email Filters */}
+          <div className="flex items-center gap-2">
+            {(['all', 'unread', 'urgent'] as const).map(filter => (
+              <button
+                key={filter}
+                onClick={() => setEmailFilter(filter)}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-medium transition-all ${
+                  emailFilter === filter
+                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                    : 'text-slate-400 hover:text-slate-300 bg-slate-800/30 border border-slate-700/30'
+                }`}
+              >
+                {filter === 'all' ? '📬 All' : filter === 'unread' ? '🔵 Unread' : '🔴 Urgent'}
+              </button>
+            ))}
+          </div>
+
+          {/* Email List */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Email List */}
+            <div className="space-y-2">
+              {filteredEmails.map(email => (
+                <div
+                  key={email.id}
+                  onClick={() => setSelectedEmail(email.id)}
+                  className={`glass-card rounded-xl p-4 cursor-pointer transition-all ${
+                    selectedEmail === email.id ? 'border-blue-500/40! bg-blue-500/5!' : ''
+                  } ${email.status === 'unread' ? 'border-l-2 border-l-blue-500' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-2">
+                      {email.priority === 'urgent' && <span className="text-red-400 text-[10px]">🔴</span>}
+                      <span className="text-xs font-semibold text-white">{email.from}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 whitespace-nowrap">{email.timestamp}</span>
+                  </div>
+                  <p className={`text-xs mb-1 ${email.status === 'unread' ? 'text-white font-medium' : 'text-slate-300'}`}>
+                    {email.subject}
+                  </p>
+                  <p className="text-[11px] text-slate-500 truncate">{email.preview}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    {email.labels.map(label => (
+                      <span key={label} className="px-1.5 py-0.5 rounded text-[9px] bg-slate-700/50 text-slate-400 border border-slate-600/30">
+                        {label}
+                      </span>
+                    ))}
+                    {email.hasAttachment && <span className="text-[10px] text-slate-500">📎</span>}
+                    {email.threadCount && <span className="text-[10px] text-slate-500">💬 {email.threadCount}</span>}
+                    <div className="ml-auto flex items-center gap-1">
+                      {email.status === 'unread' && (
+                        <span className="w-2 h-2 rounded-full bg-blue-500" />
+                      )}
+                      {email.status === 'replied' && (
+                        <span className="text-[9px] text-green-400">↩ replied</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Email Detail */}
+            <div className="glass-card rounded-2xl p-5">
+              {selectedEmail ? (
+                (() => {
+                  const email = emails.find(e => e.id === selectedEmail);
+                  if (!email) return null;
+                  return (
+                    <div className="space-y-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="text-sm font-bold text-white mb-1">{email.subject}</h3>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-400">From: <span className="text-slate-200">{email.from}</span></span>
+                            <span className="text-[10px] text-slate-600">&lt;{email.fromEmail}&gt;</span>
+                          </div>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold border ${
+                          email.priority === 'urgent' ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-slate-500/10 text-slate-400 border-slate-500/30'
+                        }`}>
+                          {email.priority === 'urgent' ? '🔴 Urgent' : 'Normal'}
+                        </span>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                        <p className="text-xs text-slate-300 leading-relaxed">{email.body}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {email.labels.map(label => (
+                          <span key={label} className="px-2 py-1 rounded-md text-[10px] bg-slate-700/50 text-slate-300 border border-slate-600/30">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-700/30">
+                        {email.status === 'unread' && (
+                          <button
+                            onClick={() => handleEmailAction(email.id, 'read')}
+                            className="px-3 py-1.5 rounded-lg text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors font-medium"
+                          >
+                            ✓ Mark Read
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleEmailAction(email.id, 'reply')}
+                          className="px-3 py-1.5 rounded-lg text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors font-medium"
+                        >
+                          ↩ Reply
+                        </button>
+                        <button
+                          onClick={() => handleEmailAction(email.id, 'archive')}
+                          className="px-3 py-1.5 rounded-lg text-[10px] bg-slate-500/10 text-slate-400 border border-slate-500/20 hover:bg-slate-500/20 transition-colors font-medium"
+                        >
+                          📁 Archive
+                        </button>
+                        <button
+                          onClick={() => handleEmailAction(email.id, 'flag')}
+                          className="px-3 py-1.5 rounded-lg text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors font-medium"
+                        >
+                          🚩 Flag
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="flex flex-col items-center justify-center h-64 text-center">
+                  <span className="text-4xl mb-3">📧</span>
+                  <p className="text-sm text-slate-400">Select an email to view details</p>
+                  <p className="text-[10px] text-slate-600 mt-1">Monitoring {emails.length} emails from {ADMIN_EMAIL}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'logs' && (
+        <div className="glass-card rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-white">Admin Action Log</h3>
+            <span className="text-[10px] text-slate-500">{logs.length} entries</span>
+          </div>
+          <div className="space-y-2 max-h-[500px] overflow-y-auto">
+            {logs.map(log => (
+              <div key={log.id} className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/20 border border-slate-700/20 hover:border-slate-600/30 transition-colors">
+                <div className={`w-7 h-7 rounded-md flex items-center justify-center text-[10px] flex-shrink-0 border ${
+                  log.action === 'Approved' || log.action === 'Completed' ? 'bg-green-500/10 text-green-400 border-green-500/30' :
+                  log.action === 'Blocked' || log.action === 'Cancelled' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                  log.action === 'Escalated' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+                  log.action === 'Connected' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
+                  'bg-slate-500/10 text-slate-400 border-slate-500/30'
+                }`}>
+                  {log.action === 'Approved' ? '✓' : log.action === 'Completed' ? '✓' : log.action === 'Blocked' ? '⊘' : log.action === 'Escalated' ? '↑' : log.action === 'Connected' ? '●' : log.action === 'Created' ? '+' : log.action === 'Paused' ? '⏸' : log.action === 'Started' ? '▶' : log.action === 'Cancelled' ? '✕' : log.action === 'Read' ? '👁' : log.action === 'Replied' ? '↩' : log.action === 'Archived' ? '📁' : log.action === 'Flagged' ? '🚩' : '•'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[11px] font-semibold text-white">{log.action}</span>
+                    <span className="text-[11px] text-slate-400 truncate">{log.target}</span>
+                  </div>
+                  {log.details && (
+                    <p className="text-[10px] text-slate-500">{log.details}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[9px] text-slate-600">{log.timestamp}</span>
+                    <span className="text-[9px] text-slate-700">·</span>
+                    <span className="text-[9px] text-slate-500">{log.admin}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'settings' && (
+        <div className="space-y-4">
+          <div className="glass-card rounded-2xl p-5">
+            <h3 className="text-sm font-bold text-white mb-4">Email Connection Settings</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                <div>
+                  <p className="text-xs font-medium text-white">Connected Email</p>
+                  <p className="text-[11px] text-blue-300 font-mono mt-0.5">{ADMIN_EMAIL}</p>
+                </div>
+                <span className="px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/20 text-[10px] text-green-400 font-medium">
+                  ● Active
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                <div>
+                  <p className="text-xs font-medium text-white">Protocol</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">IMAP (imap.gmail.com:993)</p>
+                </div>
+                <span className="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-400 font-medium">
+                  SSL/TLS
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                <div>
+                  <p className="text-xs font-medium text-white">Auto-Monitor Incoming Emails</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Automatically check for new emails every 30 seconds</p>
+                </div>
+                <button
+                  onClick={() => setAutoMonitor(!autoMonitor)}
+                  className={`w-10 h-5 rounded-full transition-colors relative ${autoMonitor ? 'bg-blue-500' : 'bg-slate-600'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${autoMonitor ? 'left-5.5 translate-x-0' : 'left-0.5'}`}
+                    style={{ left: autoMonitor ? '22px' : '2px' }}
+                  />
+                </button>
+              </div>
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                <div>
+                  <p className="text-xs font-medium text-white">Email Connection Status</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Last sync: Just now · {emails.length} emails indexed</p>
+                </div>
+                <button
+                  onClick={() => setEmailConnected(!emailConnected)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-medium border transition-colors ${
+                    emailConnected
+                      ? 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+                      : 'bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20'
+                  }`}
+                >
+                  {emailConnected ? 'Disconnect' : 'Reconnect'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-card rounded-2xl p-5">
+            <h3 className="text-sm font-bold text-white mb-4">Task Management Settings</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                <div>
+                  <p className="text-xs font-medium text-white">Auto-approve gated tasks</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Automatically approve tasks awaiting sign-off after review</p>
+                </div>
+                <span className="px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 font-medium">
+                  Manual Only
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                <div>
+                  <p className="text-xs font-medium text-white">Blocked task notifications</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Send alerts when tasks become blocked</p>
+                </div>
+                <span className="px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/20 text-[10px] text-green-400 font-medium">
+                  ● Enabled
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                <div>
+                  <p className="text-xs font-medium text-white">Admin access level</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Full control over all tasks, agents, and departments</p>
+                </div>
+                <span className="px-2 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[10px] text-purple-400 font-medium">
+                  Super Admin
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1027,6 +1676,9 @@ function OfficeDashboard() {
             <ActivityFeedPanel />
           </div>
         );
+
+      case 'admin':
+        return <AdminController />;
     }
   };
 
@@ -1048,6 +1700,7 @@ function OfficeDashboard() {
               <h2 className="text-sm font-bold text-white">
                 {activeView === 'floor' && '🏢 Office Floor'}
                 {activeView === 'departments' && '👥 Departments'}
+                {activeView === 'admin' && '🎛️ Admin Controller'}
                 {activeView === 'chat' && '💬 Team Chat'}
                 {activeView === 'meetings' && '📋 Meeting Rooms'}
                 {activeView === 'activity' && '📊 Activity'}
@@ -1055,6 +1708,7 @@ function OfficeDashboard() {
               <p className="text-[10px] text-slate-500 mt-0.5">
                 {activeView === 'floor' && 'Interactive office layout with live agent positions'}
                 {activeView === 'departments' && 'All departments and agent task queues'}
+                {activeView === 'admin' && 'Centralized task management & email monitoring'}
                 {activeView === 'chat' && 'Real-time team communication'}
                 {activeView === 'meetings' && 'Room availability and scheduling'}
                 {activeView === 'activity' && 'Live feed of office events and actions'}

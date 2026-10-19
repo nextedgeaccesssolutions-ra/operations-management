@@ -141,6 +141,49 @@
   .typing-dots span:nth-child(3) {
     animation-delay: 0.4s;
   }
+
+  .admin-stat-card {
+    transition: all 0.2s ease;
+  }
+
+  .admin-stat-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+
+  .email-row {
+    transition: all 0.2s ease;
+  }
+
+  .email-row:hover {
+    background: rgba(59, 130, 246, 0.03);
+  }
+
+  .email-row.unread {
+    border-left: 3px solid #3b82f6;
+  }
+
+  .task-action-btn {
+    transition: all 0.15s ease;
+  }
+
+  .task-action-btn:hover {
+    transform: scale(1.1);
+  }
+
+  .admin-tab-active {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.1));
+    border-color: rgba(59, 130, 246, 0.4);
+  }
+
+  .connection-pulse {
+    animation: connectionPulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes connectionPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 @keyframes pulse-glow {
