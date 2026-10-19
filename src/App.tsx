@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { AuthProvider, useAuth, type User } from './AuthContext';
+import AuthPage from './AuthPage';
 import { departments, signOffDepartments, type Department, type Agent, type Task } from './data';
 
 function StatusDot({ status }: { status: Agent['status'] }) {
@@ -195,40 +197,92 @@ function SignOffBanner() {
   );
 }
 
-function Header() {
+function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <header className="mb-8">
-      <div className="flex items-center gap-3 mb-2">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-          <span className="text-white font-bold text-sm">N</span>
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-slate-600/50 transition-all"
+      >
+        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 flex items-center justify-center text-sm">
+          {user.avatar}
         </div>
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Virtual Office</h1>
-          <p className="text-xs text-slate-500">Next Edge Access Solutions</p>
+        <div className="hidden sm:block text-left">
+          <p className="text-xs font-medium text-white leading-tight">{user.name}</p>
+          <p className="text-[10px] text-slate-500">{user.company}</p>
         </div>
-      </div>
-      <p className="text-sm text-slate-400 max-w-2xl mt-3 leading-relaxed">
-        NEAS departments laid out by team. Each desk shows who sits there and what is on their queue right now. 
-        Work marked <span className="text-amber-400 font-medium">gated</span> stops for a human before it leaves the building.
-      </p>
-      <div className="mt-3 flex items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-500/10 border border-green-500/20 text-[10px] text-green-400 font-medium">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 status-pulse" />
-          Accounts are live
-        </span>
-        <span className="text-[10px] text-slate-600">Blob store · Companies, users & sessions</span>
-      </div>
-    </header>
+        <span className="text-slate-500 text-xs">{open ? '▴' : '▾'}</span>
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-2 w-64 glass-card rounded-xl p-2 z-50 border-slate-600/30! shadow-xl shadow-black/20">
+            <div className="p-3 border-b border-slate-700/30 mb-1">
+              <p className="text-sm font-medium text-white">{user.name}</p>
+              <p className="text-xs text-slate-400">{user.email}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-[9px] text-blue-400 font-medium">
+                  {user.role}
+                </span>
+                <span className="text-[9px] text-slate-600">
+                  Joined {new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={onLogout}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              <span>🚪</span> Log out
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
-export default function App() {
+function OfficeDashboard() {
+  const { user, logout } = useAuth();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen floor-grid">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Header />
+        {/* Header with user menu */}
+        <header className="mb-8">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                <span className="text-white font-bold text-sm">N</span>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white tracking-tight">Virtual Office</h1>
+                <p className="text-xs text-slate-500">Next Edge Access Solutions</p>
+              </div>
+            </div>
+            <UserMenu user={user} onLogout={logout} />
+          </div>
+          <p className="text-sm text-slate-400 max-w-2xl mt-3 leading-relaxed">
+            NEAS departments laid out by team. Each desk shows who sits there and what is on their queue right now. 
+            Work marked <span className="text-amber-400 font-medium">gated</span> stops for a human before it leaves the building.
+          </p>
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-500/10 border border-green-500/20 text-[10px] text-green-400 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 status-pulse" />
+              Accounts are live
+            </span>
+            <span className="text-[10px] text-slate-600">Blob store · Companies, users & sessions</span>
+            <span className="text-[10px] text-slate-700">·</span>
+            <span className="text-[10px] text-slate-500">Signed in as <span className="text-slate-400">{user.email}</span></span>
+          </div>
+        </header>
+
         <StatsBar />
         <SignOffBanner />
 
@@ -313,5 +367,39 @@ export default function App() {
         </footer>
       </div>
     </div>
+  );
+}
+
+function AppContent() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center floor-grid">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center animate-pulse">
+            <span className="text-white font-bold text-lg">N</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <span className="w-3 h-3 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+            Loading workspace...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage />;
+  }
+
+  return <OfficeDashboard />;
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
