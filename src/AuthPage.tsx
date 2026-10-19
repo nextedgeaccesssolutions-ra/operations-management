@@ -4,7 +4,7 @@ import { useAuth } from './AuthContext';
 type AuthMode = 'login' | 'signup';
 
 export default function AuthPage() {
-  const { login, signup } = useAuth();
+  const { login, signup, loginAsDemo } = useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -99,6 +99,22 @@ export default function AuthPage() {
 
         {/* Auth Card */}
         <div className="glass-card rounded-2xl p-6 sm:p-8 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+          {/* Quick Demo Access */}
+          <button
+            type="button"
+            onClick={() => loginAsDemo()}
+            className="w-full mb-6 py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer"
+          >
+            <span className="text-base group-hover:scale-110 transition-transform">⚡</span>
+            <span>Explore Live Demo Workspace (Instant 1-Click Access)</span>
+          </button>
+
+          <div className="relative flex py-2 items-center mb-4">
+            <div className="flex-grow border-t border-slate-700/50"></div>
+            <span className="flex-shrink mx-3 text-[10px] text-slate-500 uppercase tracking-wider">or sign in with credentials</span>
+            <div className="flex-grow border-t border-slate-700/50"></div>
+          </div>
+
           {/* Tabs */}
           <div className="flex items-center gap-1 bg-slate-800/60 rounded-xl p-1 mb-6 border border-slate-700/30">
             <button
@@ -280,8 +296,8 @@ export default function AuthPage() {
 
         {/* Footer info */}
         <div className="text-center mt-6 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
-          <p className="text-[10px] text-slate-600">
-            Accounts stored in project Blob store · Row Level Security requires Postgres
+          <p className="text-[10px] text-slate-500">
+            Backed by Netlify Database (Managed Postgres) with Drizzle ORM · Live State Persisted
           </p>
         </div>
       </div>

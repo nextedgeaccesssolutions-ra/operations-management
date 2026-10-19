@@ -19,6 +19,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => { success: boolean; error?: string };
+  loginAsDemo: () => void;
   signup: (name: string, email: string, password: string, company: string) => { success: boolean; error?: string };
   logout: () => void;
 }
@@ -105,6 +106,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: true };
   };
 
+  const loginAsDemo = () => {
+    seedDemoAccount();
+    const accounts = getStoredAccounts();
+    const demo = accounts.find(a => a.user.email === 'demo@neas.co') || {
+      user: {
+        id: 'usr-demo',
+        name: 'Alex Vance',
+        email: 'demo@neas.co',
+        company: 'Next Edge Access Solutions',
+        role: 'Super Administrator',
+        avatar: '🧑‍💼',
+        createdAt: new Date().toISOString(),
+      },
+      password: 'demo',
+    };
+    setUser(demo.user);
+    saveSession(demo.user);
+  };
+
   const signup = (name: string, email: string, password: string, company: string) => {
     const accounts = getStoredAccounts();
     if (accounts.find(a => a.user.email.toLowerCase() === email.toLowerCase())) {
@@ -133,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginAsDemo, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
