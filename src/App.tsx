@@ -18,6 +18,7 @@ import { agenticEngine, simulateTaskProgress, simulateEmailProcessing, generateA
 import InterDepartmentFeed from './components/InterDepartmentFeed';
 import OfficeHub from './components/OfficeHub';
 import TitanCommandCenter from './components/TitanCommandCenter';
+import ExecutiveAITeam from './components/ExecutiveAITeam';
 import {
   initializeGapi,
   initializeGis,
@@ -569,7 +570,7 @@ function AgenticActivityFeed() {
 
 function OfficeDashboard() {
   const { user, logout } = useAuth();
-  const [activeView, setActiveView] = useState<'floor' | 'emails' | 'activity' | 'interdept' | 'hub' | 'titan'>('floor');
+  const [activeView, setActiveView] = useState<'floor' | 'emails' | 'activity' | 'interdept' | 'hub' | 'titan' | 'executive'>('floor');
   const [presence, setPresence] = useState<PresenceStatus>('available');
   const [agents, setAgents] = useState(departments.flatMap(d => d.agents));
 
@@ -617,6 +618,7 @@ function OfficeDashboard() {
             { id: 'emails' as const, icon: '📧', label: 'Email Monitor' },
             { id: 'activity' as const, icon: '⚡', label: 'Agent Activity' },
             { id: 'interdept' as const, icon: '🤝', label: 'Dept. Collaboration' },
+            { id: 'executive' as const, icon: '🏛️', label: 'AI Executive Team' },
           ].map(item => (
             <button
               key={item.id}
@@ -652,6 +654,7 @@ function OfficeDashboard() {
                 {activeView === 'emails' && '📧 Email Monitor'}
                 {activeView === 'activity' && '⚡ Agent Activity'}
                 {activeView === 'interdept' && '🤝 Inter-Department Collaboration'}
+                {activeView === 'executive' && '🏛️ AI Executive Team'}
               </h2>
               <p className="text-[10px] text-slate-500 mt-0.5">
                 {activeView === 'titan' && 'Autonomous Agentic AI Empire Operating System'}
@@ -660,6 +663,7 @@ function OfficeDashboard() {
                 {activeView === 'emails' && 'Real-time email monitoring with AI responses'}
                 {activeView === 'activity' && 'Live agent thoughts and actions'}
                 {activeView === 'interdept' && 'Live communication between all departments'}
+                {activeView === 'executive' && 'Strategic intelligence and operational control'}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -765,6 +769,7 @@ function OfficeDashboard() {
           {activeView === 'emails' && <EmailMonitor />}
           {activeView === 'activity' && <AgenticActivityFeed />}
           {activeView === 'interdept' && <InterDepartmentFeed />}
+          {activeView === 'executive' && <ExecutiveAITeam />}
 
           <footer className="mt-12 pt-6 border-t border-slate-800/50">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
