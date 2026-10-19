@@ -3,8 +3,13 @@
  * Requires OAuth Client ID to be configured
  */
 
-// Configuration - Real OAuth Client ID for NEAS Operations
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '737870802771-nkana7tq73qh98cgfc280dfua1r2055o.apps.googleusercontent.com';
+// Configuration - OAuth Client ID from environment variables
+// NEVER hardcode credentials in source code
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+if (!GOOGLE_CLIENT_ID) {
+  console.warn('Google OAuth Client ID not configured. Set VITE_GOOGLE_CLIENT_ID in environment variables.');
+}
 
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -251,7 +256,7 @@ export function isGoogleApiLoaded(): boolean {
 /**
  * Get the configured Client ID
  */
-export function getConfiguredClientId(): string {
+export function getConfiguredClientId(): string | undefined {
   return GOOGLE_CLIENT_ID;
 }
 
@@ -294,11 +299,17 @@ export function initializeGis(): Promise<void> {
     }
 
     try {
-      console.log('[Google API] Creating token client with Client ID:', GOOGLE_CLIENT_ID.substring(0, 20) + '...');
+      const clientId = getConfiguredClientId();
+      if (!clientId) {
+        reject(new Error('OAuth Client ID not configured'));
+        return;
+      }
+      
+      console.log('[Google API] Creating token client with Client ID:', clientId.substring(0, 20) + '...');
       
       // Initialize token client
       tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
+        client_id: clientId,
         scope: SCOPES,
         callback: (response: any) => {
           console.log('[Google API] Token callback received:', response);
