@@ -1,5 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { AuthProvider, useAuth, type User } from './AuthContext';
+import { OperationsProvider, useOperations } from './OperationsContext';
+import CreateTaskModal from './components/CreateTaskModal';
+import BookMeetingModal from './components/BookMeetingModal';
+import ToastContainer from './components/ToastContainer';
 import AuthPage from './AuthPage';
 import {
   departments,
