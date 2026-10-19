@@ -15,6 +15,7 @@ import {
   type TaskStatus,
 } from './data';
 import { agenticEngine, simulateTaskProgress, simulateEmailProcessing, generateAIResponse } from './agenticEngine';
+import InterDepartmentFeed from './components/InterDepartmentFeed';
 
 // ============ Status Components ============
 
@@ -359,7 +360,7 @@ function AgenticActivityFeed() {
 
 function OfficeDashboard() {
   const { user, logout } = useAuth();
-  const [activeView, setActiveView] = useState<'floor' | 'emails' | 'activity'>('floor');
+  const [activeView, setActiveView] = useState<'floor' | 'emails' | 'activity' | 'interdept'>('floor');
   const [presence, setPresence] = useState<PresenceStatus>('available');
   const [agents, setAgents] = useState(departments.flatMap(d => d.agents));
 
@@ -404,6 +405,7 @@ function OfficeDashboard() {
             { id: 'floor' as const, icon: '🏢', label: 'Office Floor' },
             { id: 'emails' as const, icon: '📧', label: 'Email Monitor' },
             { id: 'activity' as const, icon: '⚡', label: 'Agent Activity' },
+            { id: 'interdept' as const, icon: '🤝', label: 'Dept. Collaboration' },
           ].map(item => (
             <button
               key={item.id}
@@ -436,11 +438,13 @@ function OfficeDashboard() {
                 {activeView === 'floor' && '🏢 Office Floor'}
                 {activeView === 'emails' && '📧 Email Monitor'}
                 {activeView === 'activity' && '⚡ Agent Activity'}
+                {activeView === 'interdept' && '🤝 Inter-Department Collaboration'}
               </h2>
               <p className="text-[10px] text-slate-500 mt-0.5">
                 {activeView === 'floor' && 'Interactive office with autonomous AI agents'}
                 {activeView === 'emails' && 'Real-time email monitoring with AI responses'}
                 {activeView === 'activity' && 'Live agent thoughts and actions'}
+                {activeView === 'interdept' && 'Live communication between all departments'}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -543,6 +547,7 @@ function OfficeDashboard() {
 
           {activeView === 'emails' && <EmailMonitor />}
           {activeView === 'activity' && <AgenticActivityFeed />}
+          {activeView === 'interdept' && <InterDepartmentFeed />}
 
           <footer className="mt-12 pt-6 border-t border-slate-800/50">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
