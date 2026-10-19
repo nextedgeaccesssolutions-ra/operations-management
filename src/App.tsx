@@ -22,6 +22,17 @@ import {
   type TaskStatus,
   type TaskPriority,
 } from './data';
+import {
+  initializeGapi,
+  initializeGis,
+  requestToken,
+  isAuthenticated,
+  signOut,
+  fetchEmails,
+  sendEmail,
+  markAsRead,
+  getUserEmail,
+} from './services/googleApi';
 
 // ============ Status Components ============
 
@@ -782,11 +793,131 @@ function LiveOpsCenter() {
   const [activeTab, setActiveTab] = useState<'emails' | 'sheets' | 'platform' | 'autoreply'>('emails');
   const [emails, setEmails] = useState(initialEmails);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [composing, setComposing] = useState(false);
+  const [composeData, setComposeData] = useState({ to: '', subject: '', body: '', threadId: '' });
 
   const monitoredAccounts = [
     'info.nextedgeaccesssolutions@gmail.com',
     'nextedgeaccesssolutions@gmail.com',
   ];
+
+  // Initialize Google API on mount
+  useEffect(() => {
+    const initGoogle = async () => {
+      try {
+        await initializeGapi();
+        await initializeGis();
+        
+        // Check if already authenticated
+        if (isAuthenticated()) {
+          setGoogleConnected(true);
+          const email = await getUserEmail();
+          setUserEmail(email);
+          await loadRealEmails();
+        }
+      } catch (err) {
+        console.error('Google API init error:', err);
+      }
+    };
+
+    initGoogle();
+  }, []);
+
+  const handleConnectGoogle = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      await requestToken();
+      setGoogleConnected(true);
+      
+      const email = await getUserEmail();
+      setUserEmail(email);
+      
+      await loadRealEmails();
+    } catch (err: any) {
+      setError(err.message || 'Failed to connect to Google');
+      console.error('Connection error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisconnect = () => {
+    signOut();
+    setGoogleConnected(false);
+    setUserEmail('');
+    setEmails(initialEmails);
+  };
+
+  const loadRealEmails = async () => {
+    try {
+      setLoading(true);
+      const realEmails = await fetchEmails(50);
+      setEmails(realEmails.map(e => ({
+        id: e.id,
+        from: e.from,
+        fromEmail: e.fromEmail,
+        subject: e.subject,
+        preview: e.snippet,
+        body: e.body,
+        timestamp: new Date(e.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        status: e.unread ? 'unread' as const : 'read' as const,
+        priority: e.subject.toLowerCase().includes('urgent') ? 'urgent' as const : 'normal' as const,
+        labels: e.labels,
+        hasAttachment: false,
+        threadCount: 1,
+      })));
+    } catch (err) {
+      console.error('Error loading emails:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    try {
+      setLoading(true);
+      await sendEmail(composeData.to, composeData.subject, composeData.body, composeData.threadId || undefined);
+      setComposing(false);
+      setComposeData({ to: '', subject: '', body: '', threadId: '' });
+      await loadRealEmails();
+    } catch (err: any) {
+      setError(err.message || 'Failed to send email');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMarkAsRead = async (emailId: string) => {
+    try {
+      await markAsRead(emailId);
+      setEmails(emails.map(e => e.id === emailId ? { ...e, status: 'read' as const } : e));
+    } catch (err) {
+      console.error('Error marking as read:', err);
+    }
+  };
+
+  const handleReply = (email: any) => {
+    setComposeData({
+      to: email.fromEmail,
+      subject: `Re: ${email.subject}`,
+      body: `\n\n---\nOn ${email.timestamp}, ${email.from} wrote:\n> ${email.body.split('\n').join('\n> ')}`,
+      threadId: email.threadId || '',
+    });
+    setComposing(true);
+  };
+
+  const handleEmailAction = (emailId: string, action: 'read' | 'reply' | 'archive' | 'flag') => {
+    if (action === 'archive') {
+      setEmails(emails.map(e => e.id === emailId ? { ...e, status: 'archived' as const } : e));
+    } else if (action === 'flag') {
+      // Flag functionality
+    }
+  };
 
   const sheets = [
     {
@@ -837,21 +968,27 @@ function LiveOpsCenter() {
               <div className="flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full ${googleConnected ? 'bg-green-500 status-pulse' : 'bg-red-500'}`} />
                 <span className={`text-xs font-semibold ${googleConnected ? 'text-green-400' : 'text-red-400'}`}>
-                  {googleConnected ? 'Google Connected' : 'Not Connected'}
+                  {googleConnected ? `Connected: ${userEmail}` : 'Not Connected'}
                 </span>
               </div>
             </div>
             <button
-              onClick={() => setGoogleConnected(!googleConnected)}
+              onClick={googleConnected ? handleDisconnect : handleConnectGoogle}
+              disabled={loading}
               className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
                 googleConnected
                   ? 'bg-slate-800/60 border-slate-700/50 text-slate-300 hover:border-slate-600/50'
                   : 'bg-blue-500/20 border-blue-500/30 text-blue-300 hover:bg-blue-500/30'
-              }`}
+              } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {googleConnected ? 'Disconnect' : 'Connect Google'}
+              {loading ? 'Connecting...' : googleConnected ? 'Disconnect' : 'Connect Google'}
             </button>
           </div>
+          {error && (
+            <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-300">
+              ⚠️ {error}
+            </div>
+          )}
         </div>
 
         {/* Monitored Accounts */}
@@ -907,8 +1044,14 @@ function LiveOpsCenter() {
                 </svg>
               </div>
               <div>
-                <p className="text-xs font-semibold text-white">Gmail API Monitoring</p>
-                <p className="text-[10px] text-slate-500">Polling every 30 seconds · IMAP fallback available</p>
+                <p className="text-xs font-semibold text-white">
+                  {googleConnected ? 'Real Gmail Inbox' : 'Gmail API Monitoring'}
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  {googleConnected 
+                    ? `Connected to ${userEmail} · ${emails.length} emails loaded`
+                    : 'Connect Google to view real emails'}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -918,6 +1061,23 @@ function LiveOpsCenter() {
               <span className="px-3 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-400 font-medium">
                 📬 {emails.filter(e => e.status === 'unread').length} unread
               </span>
+              {googleConnected && (
+                <button
+                  onClick={loadRealEmails}
+                  disabled={loading}
+                  className="px-3 py-1 rounded-lg bg-green-500/10 border border-green-500/20 text-[10px] text-green-400 font-medium hover:bg-green-500/20 transition-colors"
+                >
+                  {loading ? 'Loading...' : '↻ Refresh'}
+                </button>
+              )}
+              {googleConnected && (
+                <button
+                  onClick={() => setComposing(true)}
+                  className="px-3 py-1 rounded-lg bg-blue-500/20 border border-blue-500/30 text-[10px] text-blue-300 font-medium hover:bg-blue-500/30 transition-colors"
+                >
+                  ✉ Compose
+                </button>
+              )}
             </div>
           </div>
 
@@ -978,14 +1138,27 @@ function LiveOpsCenter() {
                           </span>
                         ))}
                       </div>
-                      <div className="flex items-center gap-2 pt-2 border-t border-slate-700/30">
-                        <button className="px-3 py-1.5 rounded-lg text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors font-medium">
-                          ✓ Mark Read
-                        </button>
-                        <button className="px-3 py-1.5 rounded-lg text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors font-medium">
-                          ↩ Reply as CEO
-                        </button>
-                        <button className="px-3 py-1.5 rounded-lg text-[10px] bg-slate-500/10 text-slate-400 border border-slate-500/20 hover:bg-slate-500/20 transition-colors font-medium">
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-700/30 flex-wrap">
+                        {email.status === 'unread' && googleConnected && (
+                          <button
+                            onClick={() => handleMarkAsRead(email.id)}
+                            className="px-3 py-1.5 rounded-lg text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors font-medium"
+                          >
+                            ✓ Mark Read
+                          </button>
+                        )}
+                        {googleConnected && (
+                          <button
+                            onClick={() => handleReply(email)}
+                            className="px-3 py-1.5 rounded-lg text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors font-medium"
+                          >
+                            ↩ Reply as CEO
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleEmailAction(email.id, 'archive')}
+                          className="px-3 py-1.5 rounded-lg text-[10px] bg-slate-500/10 text-slate-400 border border-slate-500/20 hover:bg-slate-500/20 transition-colors font-medium"
+                        >
                           📁 Archive
                         </button>
                       </div>
@@ -1001,6 +1174,71 @@ function LiveOpsCenter() {
               )}
             </div>
           </div>
+
+          {/* Compose Modal */}
+          {composing && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <div className="glass-card rounded-2xl p-6 w-full max-w-2xl border-blue-500/20!">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>✉</span> {composeData.subject.startsWith('Re:') ? 'Reply' : 'Compose'} Email
+                  </h3>
+                  <button onClick={() => setComposing(false)} className="text-slate-500 hover:text-slate-300">✕</button>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] text-slate-500 uppercase tracking-wider">To</label>
+                    <input
+                      type="email"
+                      value={composeData.to}
+                      onChange={e => setComposeData({ ...composeData, to: e.target.value })}
+                      className="w-full mt-1 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
+                      placeholder="recipient@example.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 uppercase tracking-wider">Subject</label>
+                    <input
+                      type="text"
+                      value={composeData.subject}
+                      onChange={e => setComposeData({ ...composeData, subject: e.target.value })}
+                      className="w-full mt-1 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
+                      placeholder="Email subject"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 uppercase tracking-wider">Body</label>
+                    <textarea
+                      value={composeData.body}
+                      onChange={e => setComposeData({ ...composeData, body: e.target.value })}
+                      rows={8}
+                      className="w-full mt-1 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 resize-none"
+                      placeholder="Write your message..."
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      onClick={handleSendEmail}
+                      disabled={loading || !composeData.to || !composeData.subject}
+                      className="px-4 py-2 rounded-lg bg-blue-500/20 border border-blue-500/30 text-xs text-blue-300 font-medium hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+                    >
+                      {loading ? 'Sending...' : '📤 Send Email'}
+                    </button>
+                    <button
+                      onClick={() => setComposing(false)}
+                      className="px-4 py-2 rounded-lg bg-slate-700/30 border border-slate-600/30 text-xs text-slate-400 font-medium hover:bg-slate-700/50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <div className="ml-auto flex items-center gap-2">
+                      <span className="text-[10px] text-slate-500">Sending from:</span>
+                      <span className="text-[10px] text-blue-300 font-mono">{userEmail}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
