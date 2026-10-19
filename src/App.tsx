@@ -245,6 +245,75 @@ function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
   );
 }
 
+function VirtualOfficeHero() {
+  return (
+    <div className="relative mb-8 rounded-2xl overflow-hidden border border-slate-700/30 animate-fade-in-up">
+      {/* Background Image */}
+      <div className="relative h-64 md:h-80 lg:h-96">
+        <img
+          src="https://epaouydin3q.exactdn.com/wp-content/uploads/2024/11/AI-powered-virtual-classrooms.jpg?strip=all&lossy=1&fit=1024%2C585&ssl=1"
+          alt="Virtual Office Floor"
+          className="w-full h-full object-cover"
+        />
+        {/* Overlay gradient */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-900/20 to-purple-900/20" />
+        <div className="absolute inset-0 hero-overlay-grid" />
+        
+        {/* Department Stations Overlay */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="grid grid-cols-4 gap-4 md:gap-8 px-8 max-w-5xl">
+            {departments.slice(0, 8).map((dept, i) => (
+              <div
+                key={dept.id}
+                className="group relative flex flex-col items-center animate-fade-in-up"
+                style={{ animationDelay: `${i * 100 + 300}ms` }}
+              >
+                {/* Station marker */}
+                <div
+                  className="station-marker relative w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-xl md:text-2xl backdrop-blur-sm border-2 cursor-pointer"
+                  style={{
+                    backgroundColor: `${dept.color}20`,
+                    borderColor: `${dept.color}60`,
+                    boxShadow: `0 0 20px ${dept.color}30`,
+                  }}
+                >
+                  {dept.icon}
+                  {/* Status indicator */}
+                  <div
+                    className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-900"
+                    style={{
+                      backgroundColor: dept.agents.some(a => a.status === 'on-duty') ? '#22c55e' : '#6b7280',
+                      boxShadow: dept.agents.some(a => a.status === 'on-duty') ? '0 0 8px #22c55e' : 'none',
+                    }}
+                  />
+                </div>
+                {/* Label */}
+                <div className="mt-2 text-center">
+                  <p className="text-[10px] md:text-xs font-medium text-white/90 backdrop-blur-sm px-2 py-0.5 rounded bg-slate-900/50">
+                    {dept.name}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Title overlay */}
+        <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
+          <h2 className="text-xl md:text-2xl lg:text-3xl font-bold text-white mb-2">
+            Welcome to Your Virtual Office
+          </h2>
+          <p className="text-sm md:text-base text-slate-300 max-w-2xl">
+            Step into the NEAS workspace. Each department station represents an AI agent ready to handle tasks. 
+            Click any station below to view their current queue and status.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OfficeDashboard() {
   const { user, logout } = useAuth();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -282,6 +351,9 @@ function OfficeDashboard() {
             <span className="text-[10px] text-slate-500">Signed in as <span className="text-slate-400">{user.email}</span></span>
           </div>
         </header>
+
+        {/* Virtual Office Hero */}
+        <VirtualOfficeHero />
 
         <StatsBar />
         <SignOffBanner />

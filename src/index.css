@@ -119,3 +119,17 @@
 .animate-float {
   animation: float 3s ease-in-out infinite;
 }
+
+.station-marker {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.station-marker:hover {
+  transform: translateY(-4px) scale(1.05);
+}
+
+.hero-overlay-grid {
+  background-image: 
+    radial-gradient(circle at 25% 25%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(139, 92, 246, 0.08) 0%, transparent 50%);
+}
