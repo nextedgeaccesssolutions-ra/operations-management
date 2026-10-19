@@ -803,6 +803,7 @@ function LiveOpsCenter() {
   const [composeData, setComposeData] = useState({ to: '', subject: '', body: '', threadId: '' });
   const [setupStep, setSetupStep] = useState(1);
   const [googleApiReady, setGoogleApiReady] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<string>('idle');
 
   const monitoredAccounts = [
     'info.nextedgeaccesssolutions@gmail.com',
@@ -889,80 +890,128 @@ function LiveOpsCenter() {
   }, []);
 
   const handleConnectGoogle = async () => {
+    console.log('[App] handleConnectGoogle called');
+    
     try {
       setLoading(true);
       setError(null);
+      setConnectionStatus('checking');
       
       // Check if Google API scripts are loaded
+      console.log('[App] Checking if Google API is loaded...');
       if (!isGoogleApiLoaded()) {
+        console.error('[App] Google API not loaded');
+        setConnectionStatus('error');
         setError('Google API scripts are still loading. Please wait a few seconds and try again.');
         setLoading(false);
         return;
       }
+      console.log('[App] ✓ Google API loaded');
+      setConnectionStatus('initializing');
       
       // Check if client ID is configured
+      console.log('[App] Checking if Client ID is configured...');
       if (!isClientIdConfigured()) {
+        console.error('[App] Client ID not configured');
+        setConnectionStatus('error');
         setError('OAuth Client ID not configured. Please complete the Setup Wizard first.');
         setActiveTab('setup');
         setLoading(false);
         return;
       }
+      console.log('[App] ✓ Client ID configured');
       
       // Initialize gapi client if not already done
       if (!isGapiReady()) {
+        console.log('[App] Initializing gapi client...');
+        setConnectionStatus('initializing-gapi');
         try {
           await initializeGapi();
+          console.log('[App] ✓ gapi client initialized');
         } catch (initErr: any) {
+          console.error('[App] Failed to initialize gapi:', initErr);
+          setConnectionStatus('error');
           setError('Failed to initialize Google API. Please refresh the page and try again.');
           setLoading(false);
           return;
         }
+      } else {
+        console.log('[App] ✓ gapi client already ready');
       }
       
       // Initialize GIS if not already done
+      console.log('[App] Initializing GIS...');
+      setConnectionStatus('initializing-gis');
       try {
         await initializeGis();
+        console.log('[App] ✓ GIS initialized');
       } catch (initErr: any) {
+        console.error('[App] Failed to initialize GIS:', initErr);
+        setConnectionStatus('error');
         setError(initErr?.message || 'Failed to initialize Google services. Please refresh the page.');
         setLoading(false);
         return;
       }
       
       // Small delay to ensure UI updates before popup opens
+      console.log('[App] Waiting 100ms before requesting token...');
+      setConnectionStatus('preparing-popup');
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Request token - this will open the Google auth popup
+      console.log('[App] Requesting OAuth token...');
+      setConnectionStatus('opening-popup');
       await requestToken();
+      console.log('[App] ✓ Token request completed');
+      setConnectionStatus('authenticating');
       
       // Verify we got a token
+      console.log('[App] Checking if authenticated...');
       if (!isAuthenticated()) {
+        console.error('[App] Not authenticated after token request');
+        setConnectionStatus('error');
         throw new Error('Authentication completed but no token received. Please try again.');
       }
+      console.log('[App] ✓ Authenticated');
       
       setGoogleConnected(true);
+      setConnectionStatus('connected');
+      console.log('[App] ✓ Google connected');
       
       // Get user email
       try {
+        console.log('[App] Getting user email...');
+        setConnectionStatus('loading-profile');
         const email = await getUserEmail();
         setUserEmail(email);
+        console.log('[App] ✓ User email:', email);
       } catch (emailErr: any) {
-        console.warn('Could not get user email:', emailErr?.message || emailErr);
+        console.warn('[App] Could not get user email:', emailErr?.message || emailErr);
         // Continue anyway - we're still connected
       }
       
       // Load emails
       try {
+        console.log('[App] Loading emails...');
+        setConnectionStatus('loading-emails');
         await loadRealEmails();
+        console.log('[App] ✓ Emails loaded');
       } catch (loadErr: any) {
-        console.warn('Could not load emails:', loadErr?.message || loadErr);
+        console.warn('[App] Could not load emails:', loadErr?.message || loadErr);
         // Continue anyway - we're still connected
       }
       
       // Switch to emails tab
+      console.log('[App] Switching to emails tab');
       setActiveTab('emails');
       
+      console.log('[App] ✓ Connection complete!');
+      
     } catch (err: any) {
+      console.error('[App] Connection error:', err);
       const errorMessage = err?.message || 'Failed to connect to Google';
+      
+      setConnectionStatus('error');
       
       // Provide helpful error messages
       if (errorMessage.includes('popup') || errorMessage.includes('blocked')) {
@@ -982,8 +1031,6 @@ function LiveOpsCenter() {
       } else {
         setError(errorMessage);
       }
-      
-      console.error('Connection error:', err);
     } finally {
       setLoading(false);
     }
@@ -1364,7 +1411,16 @@ function LiveOpsCenter() {
                     {loading ? (
                       <span className="flex items-center gap-2">
                         <span className="animate-spin">⏳</span>
-                        Connecting... (Check popup)
+                        {connectionStatus === 'checking' && 'Checking...'}
+                        {connectionStatus === 'initializing' && 'Initializing...'}
+                        {connectionStatus === 'initializing-gapi' && 'Loading GAPI...'}
+                        {connectionStatus === 'initializing-gis' && 'Loading GIS...'}
+                        {connectionStatus === 'preparing-popup' && 'Preparing...'}
+                        {connectionStatus === 'opening-popup' && 'Opening popup...'}
+                        {connectionStatus === 'authenticating' && 'Authenticating...'}
+                        {connectionStatus === 'loading-profile' && 'Loading profile...'}
+                        {connectionStatus === 'loading-emails' && 'Loading emails...'}
+                        {!['checking', 'initializing', 'initializing-gapi', 'initializing-gis', 'preparing-popup', 'opening-popup', 'authenticating', 'loading-profile', 'loading-emails'].includes(connectionStatus) && 'Connecting...'}
                       </span>
                     ) : '🔗 Connect Google'}
                   </button>
@@ -1380,11 +1436,32 @@ function LiveOpsCenter() {
               </button>
             )}
           </div>
+          
+          {/* Connection Status Indicator */}
+          {loading && connectionStatus !== 'error' && (
+            <div className="mt-3 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">
+              <div className="flex items-center gap-2">
+                <span className="animate-spin text-blue-400">⏳</span>
+                <span className="text-xs text-blue-300">
+                  {connectionStatus === 'checking' && 'Checking Google API...'}
+                  {connectionStatus === 'initializing' && 'Initializing connection...'}
+                  {connectionStatus === 'initializing-gapi' && 'Loading Google API client...'}
+                  {connectionStatus === 'initializing-gis' && 'Loading Google Identity Services...'}
+                  {connectionStatus === 'preparing-popup' && 'Preparing authentication popup...'}
+                  {connectionStatus === 'opening-popup' && 'Opening Google sign-in popup... (Check your browser)'}
+                  {connectionStatus === 'authenticating' && 'Waiting for authentication...'}
+                  {connectionStatus === 'loading-profile' && 'Loading your profile...'}
+                  {connectionStatus === 'loading-emails' && 'Loading your emails...'}
+                  {!['checking', 'initializing', 'initializing-gapi', 'initializing-gis', 'preparing-popup', 'opening-popup', 'authenticating', 'loading-profile', 'loading-emails'].includes(connectionStatus) && 'Connecting...'}
+                </span>
+              </div>
+            </div>
+          )}
           {error && (
             <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-300">
               <div className="flex items-start gap-2">
                 <span className="text-base">⚠️</span>
-                <div>
+                <div className="flex-1">
                   <p className="font-semibold mb-1">Connection Error</p>
                   <p>{error}</p>
                   {error.includes('Setup Wizard') && (
@@ -1396,6 +1473,22 @@ function LiveOpsCenter() {
                     </button>
                   )}
                 </div>
+                <button
+                  onClick={() => {
+                    console.log('=== Debug Info ===');
+                    console.log('Google API Loaded:', isGoogleApiLoaded());
+                    console.log('Client ID Configured:', isClientIdConfigured());
+                    console.log('GAPI Ready:', isGapiReady());
+                    console.log('Google Scripts:', window.googleApiLoading);
+                    console.log('gapi exists:', typeof gapi !== 'undefined');
+                    console.log('google exists:', typeof google !== 'undefined');
+                    alert('Debug info logged to console (F12). Check the Console tab.');
+                  }}
+                  className="px-2 py-1 rounded bg-slate-700/50 text-[10px] text-slate-400 hover:bg-slate-700 transition-all"
+                  title="Debug Info"
+                >
+                  🔍 Debug
+                </button>
               </div>
             </div>
           )}

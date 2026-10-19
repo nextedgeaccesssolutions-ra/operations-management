@@ -173,46 +173,57 @@ export function isClientIdConfigured(): boolean {
  */
 export function initializeGis(): Promise<void> {
   return new Promise(async (resolve, reject) => {
+    console.log('[Google API] Initializing GIS...');
+    
     // Wait for scripts to load
     try {
       await waitForScripts();
     } catch (error: any) {
+      console.error('[Google API] Script loading failed:', error);
       reject(error);
       return;
     }
 
     // Check if Client ID is configured
     if (!isClientIdConfigured()) {
+      console.error('[Google API] Client ID not configured');
       reject(new Error('OAuth Client ID not configured. Please complete the Setup Wizard first.'));
       return;
     }
 
     // Check if Google Identity Services is loaded
     if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+      console.error('[Google API] Google Identity Services not loaded');
       reject(new Error('Google Identity Services not loaded. Please refresh the page.'));
       return;
     }
 
     try {
+      console.log('[Google API] Creating token client with Client ID:', GOOGLE_CLIENT_ID.substring(0, 20) + '...');
+      
       // Initialize token client
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: SCOPES,
         callback: (response: any) => {
+          console.log('[Google API] Token callback received:', response);
           // This callback is called after each token request
           if (response.error) {
-            console.error('GIS callback error:', response.error);
+            console.error('[Google API] Token callback error:', response.error, response.error_description);
           } else {
+            console.log('[Google API] Token received successfully');
             gisInited = true;
           }
         },
       });
       
+      console.log('[Google API] Token client created successfully');
+      
       // Mark as initialized (token client created successfully)
       gisInited = true;
       resolve();
     } catch (error: any) {
-      console.error('GIS init error:', error);
+      console.error('[Google API] GIS init error:', error);
       reject(new Error(error.message || 'Failed to initialize Google Identity Services'));
     }
   });
@@ -223,57 +234,74 @@ export function initializeGis(): Promise<void> {
  */
 export function requestToken(): Promise<void> {
   return new Promise((resolve, reject) => {
+    console.log('[Google API] Requesting OAuth token...');
+    
     // Verify token client exists
     if (!tokenClient) {
+      console.error('[Google API] Token client not initialized');
       reject(new Error('Token client not initialized. Please refresh the page and try again.'));
       return;
     }
 
     // Verify gapi.client exists before accessing it
     if (typeof gapi === 'undefined' || !gapi.client) {
+      console.error('[Google API] gapi.client not available');
       reject(new Error('Google API client not ready. Please refresh the page and try again.'));
       return;
     }
 
     // Set up timeout
     const timeoutId = setTimeout(() => {
+      console.error('[Google API] Token request timeout');
       reject(new Error('Connection timeout. Please try again.'));
     }, 60000);
 
     // Override the callback for this specific request
     tokenClient.callback = (response: any) => {
+      console.log('[Google API] Token request callback:', response);
       clearTimeout(timeoutId);
       
       if (response.error) {
         const errorMsg = response.error_description || response.error || 'Authentication failed';
+        console.error('[Google API] Token error:', errorMsg);
         reject(new Error(errorMsg));
       } else {
+        console.log('[Google API] Token received successfully');
         // Token received successfully - set it on gapi.client
         try {
           gapi.client.setToken(response);
+          console.log('[Google API] Token set on gapi.client');
         } catch (e) {
-          console.warn('Failed to set token on gapi.client:', e);
+          console.warn('[Google API] Failed to set token on gapi.client:', e);
         }
         resolve();
       }
     };
 
     try {
-      // Request the token - this will trigger the callback and open the popup
+      // Check if we already have a token
       let currentToken = null;
       try {
         currentToken = gapi.client.getToken();
+        console.log('[Google API] Current token:', currentToken ? 'exists' : 'null');
       } catch (e) {
-        // getToken might throw if client isn't fully ready
+        console.log('[Google API] getToken() threw error, treating as null');
         currentToken = null;
       }
       
+      console.log('[Google API] Calling requestAccessToken...');
+      
       if (currentToken === null) {
+        console.log('[Google API] Requesting new token with consent prompt');
         tokenClient.requestAccessToken({ prompt: 'consent' });
       } else {
+        console.log('[Google API] Requesting token without prompt (existing token)');
         tokenClient.requestAccessToken({ prompt: '' });
       }
+      
+      console.log('[Google API] requestAccessToken called successfully');
     } catch (error: any) {
+      console.error('[Google API] Error calling requestAccessToken:', error);
       clearTimeout(timeoutId);
       reject(new Error(error.message || 'Failed to request access token'));
     }
