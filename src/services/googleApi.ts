@@ -3,8 +3,8 @@
  * Requires OAuth Client ID to be configured
  */
 
-// Configuration - Replace with your actual OAuth Client ID
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'YOUR_CLIENT_ID_HERE';
+// Configuration - Real OAuth Client ID for NEAS Operations
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '737870802771-nkana7tq73qh98cgfc280dfua1r2055o.apps.googleusercontent.com';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
