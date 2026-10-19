@@ -74,12 +74,41 @@ export async function initializeGapi(): Promise<void> {
 }
 
 /**
+ * Check if Google API scripts are loaded
+ */
+export function isGoogleApiLoaded(): boolean {
+  return typeof gapi !== 'undefined' && typeof google !== 'undefined' && !!google.accounts;
+}
+
+/**
+ * Get the configured Client ID
+ */
+export function getConfiguredClientId(): string {
+  return GOOGLE_CLIENT_ID;
+}
+
+/**
+ * Check if Client ID is properly configured
+ */
+export function isClientIdConfigured(): boolean {
+  const clientId = getConfiguredClientId();
+  return !!clientId && clientId !== 'YOUR_CLIENT_ID_HERE' && clientId.includes('.apps.googleusercontent.com');
+}
+
+/**
  * Initialize Google Identity Services
  */
 export function initializeGis(): Promise<void> {
   return new Promise((resolve, reject) => {
+    // Check if Client ID is configured
+    if (!isClientIdConfigured()) {
+      reject(new Error('OAuth Client ID not configured. Please complete the Setup Wizard first.'));
+      return;
+    }
+
+    // Check if Google scripts are loaded
     if (typeof google === 'undefined' || !google.accounts) {
-      reject(new Error('Google Identity Services not loaded'));
+      reject(new Error('Google Identity Services not loaded. Please refresh the page or check your internet connection.'));
       return;
     }
 
@@ -89,15 +118,15 @@ export function initializeGis(): Promise<void> {
         scope: SCOPES,
         callback: (response: any) => {
           if (response.error) {
-            reject(response.error);
+            reject(new Error(response.error_description || 'OAuth authentication failed'));
           } else {
             gisInited = true;
             resolve();
           }
         },
       });
-    } catch (error) {
-      reject(error);
+    } catch (error: any) {
+      reject(new Error(error.message || 'Failed to initialize Google Identity Services'));
     }
   });
 }

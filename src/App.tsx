@@ -32,6 +32,8 @@ import {
   sendEmail,
   markAsRead,
   getUserEmail,
+  isGoogleApiLoaded,
+  isClientIdConfigured,
 } from './services/googleApi';
 
 // ============ Status Components ============
@@ -799,6 +801,7 @@ function LiveOpsCenter() {
   const [composing, setComposing] = useState(false);
   const [composeData, setComposeData] = useState({ to: '', subject: '', body: '', threadId: '' });
   const [setupStep, setSetupStep] = useState(1);
+  const [googleApiReady, setGoogleApiReady] = useState(false);
 
   const monitoredAccounts = [
     'info.nextedgeaccesssolutions@gmail.com',
@@ -809,15 +812,43 @@ function LiveOpsCenter() {
   useEffect(() => {
     const initGoogle = async () => {
       try {
+        // Check if Google API scripts are loaded
+        if (!isGoogleApiLoaded()) {
+          console.log('Google API scripts not loaded yet, waiting...');
+          // Wait a bit for scripts to load
+          setTimeout(async () => {
+            if (isGoogleApiLoaded()) {
+              setGoogleApiReady(true);
+              await initializeGapi();
+              if (isClientIdConfigured()) {
+                await initializeGis();
+                if (isAuthenticated()) {
+                  setGoogleConnected(true);
+                  const email = await getUserEmail();
+                  setUserEmail(email);
+                  await loadRealEmails();
+                  setActiveTab('emails');
+                }
+              }
+            }
+          }, 1000);
+          return;
+        }
+
+        setGoogleApiReady(true);
         await initializeGapi();
-        await initializeGis();
         
-        // Check if already authenticated
-        if (isAuthenticated()) {
-          setGoogleConnected(true);
-          const email = await getUserEmail();
-          setUserEmail(email);
-          await loadRealEmails();
+        if (isClientIdConfigured()) {
+          await initializeGis();
+          
+          // Check if already authenticated
+          if (isAuthenticated()) {
+            setGoogleConnected(true);
+            const email = await getUserEmail();
+            setUserEmail(email);
+            await loadRealEmails();
+            setActiveTab('emails');
+          }
         }
       } catch (err) {
         console.error('Google API init error:', err);
@@ -832,11 +863,26 @@ function LiveOpsCenter() {
       setLoading(true);
       setError(null);
       
+      // Check if Google API scripts are loaded
+      if (!isGoogleApiLoaded()) {
+        setError('Google API scripts are still loading. Please wait a moment and try again.');
+        setLoading(false);
+        return;
+      }
+      
       // Check if client ID is configured
-      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-      if (!clientId || clientId === 'YOUR_CLIENT_ID_HERE') {
-        setError('OAuth Client ID not configured. Please complete the Setup wizard first.');
+      if (!isClientIdConfigured()) {
+        setError('OAuth Client ID not configured. Please complete the Setup Wizard first to get your Client ID from Google Cloud Console.');
         setActiveTab('setup');
+        setLoading(false);
+        return;
+      }
+      
+      // Initialize GIS if not already done
+      try {
+        await initializeGis();
+      } catch (initErr: any) {
+        setError(initErr.message || 'Failed to initialize Google services');
         setLoading(false);
         return;
       }
@@ -849,7 +895,20 @@ function LiveOpsCenter() {
       
       await loadRealEmails();
     } catch (err: any) {
-      setError(err.message || 'Failed to connect to Google');
+      const errorMessage = err.message || 'Failed to connect to Google';
+      
+      // Provide helpful error messages
+      if (errorMessage.includes('popup')) {
+        setError('Pop-up was blocked. Please allow pop-ups for this site and try again.');
+      } else if (errorMessage.includes('access_denied')) {
+        setError('Access was denied. Please try again and grant the required permissions.');
+      } else if (errorMessage.includes('invalid_client')) {
+        setError('Invalid OAuth Client ID. Please check your configuration in the Setup Wizard.');
+        setActiveTab('setup');
+      } else {
+        setError(errorMessage);
+      }
+      
       console.error('Connection error:', err);
     } finally {
       setLoading(false);
@@ -970,6 +1029,11 @@ function LiveOpsCenter() {
           <div>
             <h2 className="text-2xl font-bold text-white mb-1">Setup Google API Connection</h2>
             <p className="text-sm text-slate-400">Connect your Gmail accounts in 5 minutes</p>
+            {isClientIdConfigured() && (
+              <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
+                <span>✓</span> OAuth Client ID is configured
+              </p>
+            )}
           </div>
         </div>
 
@@ -1106,15 +1170,26 @@ function LiveOpsCenter() {
               </div>
               <p className="text-sm text-slate-300 mt-4">6. Click "Create" and <span className="text-amber-400 font-semibold">copy the Client ID</span></p>
             </div>
-            <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
-              <p className="text-xs text-amber-300 font-medium mb-2">⚠️ Important: Copy Your Client ID</p>
-              <p className="text-[11px] text-slate-400">
-                Your Client ID looks like: <code className="text-blue-300">123456789-abc123.apps.googleusercontent.com</code>
-              </p>
-              <p className="text-[11px] text-slate-400 mt-2">
-                You'll need to add this to your environment variables and redeploy the app.
-              </p>
-            </div>
+            
+            {isClientIdConfigured() ? (
+              <div className="p-4 rounded-xl bg-green-500/5 border border-green-500/20">
+                <p className="text-xs text-green-300 font-medium mb-2">✓ OAuth Client ID is configured!</p>
+                <p className="text-[11px] text-slate-400">
+                  You can now connect your Gmail account. Click the button below to authenticate.
+                </p>
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                <p className="text-xs text-amber-300 font-medium mb-2">⚠️ Important: Copy Your Client ID</p>
+                <p className="text-[11px] text-slate-400">
+                  Your Client ID looks like: <code className="text-blue-300">123456789-abc123.apps.googleusercontent.com</code>
+                </p>
+                <p className="text-[11px] text-slate-400 mt-2">
+                  You'll need to add this to your environment variables and redeploy the app.
+                </p>
+              </div>
+            )}
+            
             <div className="flex gap-2">
               <button
                 onClick={() => setSetupStep(3)}
@@ -1122,15 +1197,21 @@ function LiveOpsCenter() {
               >
                 ← Back
               </button>
-              <button
-                onClick={() => {
-                  setActiveTab('emails');
-                  handleConnectGoogle();
-                }}
-                className="flex-1 px-4 py-3 rounded-lg bg-green-500/20 border border-green-500/30 text-sm text-green-300 font-medium hover:bg-green-500/30 transition-colors"
-              >
-                ✓ Done - Connect Gmail Now
-              </button>
+              {isClientIdConfigured() ? (
+                <button
+                  onClick={() => {
+                    setActiveTab('emails');
+                    handleConnectGoogle();
+                  }}
+                  className="flex-1 px-4 py-3 rounded-lg bg-green-500/20 border border-green-500/30 text-sm text-green-300 font-medium hover:bg-green-500/30 transition-colors"
+                >
+                  ✓ Connect Gmail Now
+                </button>
+              ) : (
+                <div className="flex-1 px-4 py-3 rounded-lg bg-slate-700/30 border border-slate-600/30 text-sm text-slate-400 text-center">
+                  Add Client ID to .env and redeploy to continue
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1171,6 +1252,16 @@ function LiveOpsCenter() {
             <div>
               <h2 className="text-2xl font-bold text-white mb-1">Live Operations Center</h2>
               <p className="text-sm text-slate-400">24/7 Email Monitoring · Auto-Reply · Real-Time Sheets · Platform Monitoring</p>
+              {!googleApiReady && (
+                <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
+                  <span className="animate-pulse">⏳</span> Loading Google API scripts...
+                </p>
+              )}
+              {googleApiReady && !isClientIdConfigured() && (
+                <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
+                  <span>⚠️</span> Setup required: OAuth Client ID not configured
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -1178,17 +1269,28 @@ function LiveOpsCenter() {
               <div className="flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full ${googleConnected ? 'bg-green-500 status-pulse' : 'bg-amber-500 status-pulse'}`} />
                 <span className={`text-xs font-semibold ${googleConnected ? 'text-green-400' : 'text-amber-400'}`}>
-                  {googleConnected ? `✓ ${userEmail}` : 'Setup Required'}
+                  {googleConnected ? `✓ ${userEmail}` : 'Not Connected'}
                 </span>
               </div>
             </div>
             {!googleConnected && (
-              <button
-                onClick={() => setActiveTab('setup')}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:bg-blue-500/30 transition-all"
-              >
-                🔧 Setup Wizard
-              </button>
+              <>
+                <button
+                  onClick={() => setActiveTab('setup')}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:bg-blue-500/30 transition-all"
+                >
+                  🔧 Setup Wizard
+                </button>
+                {isClientIdConfigured() && googleApiReady && (
+                  <button
+                    onClick={handleConnectGoogle}
+                    disabled={loading}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-green-500/20 border border-green-500/30 text-green-300 hover:bg-green-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? 'Connecting...' : '🔗 Connect Google'}
+                  </button>
+                )}
+              </>
             )}
             {googleConnected && (
               <button
@@ -1201,15 +1303,35 @@ function LiveOpsCenter() {
           </div>
           {error && (
             <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-300">
-              ⚠️ {error}
+              <div className="flex items-start gap-2">
+                <span className="text-base">⚠️</span>
+                <div>
+                  <p className="font-semibold mb-1">Connection Error</p>
+                  <p>{error}</p>
+                  {error.includes('Setup Wizard') && (
+                    <button
+                      onClick={() => setActiveTab('setup')}
+                      className="mt-2 px-3 py-1 rounded-lg bg-blue-500/20 border border-blue-500/30 text-[10px] text-blue-300 hover:bg-blue-500/30 transition-all"
+                    >
+                      Open Setup Wizard →
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
           {!googleConnected && !error && (
             <div className="mt-3 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">
               <p className="text-xs text-blue-300 font-medium mb-1">👋 Welcome! Let's connect your Gmail accounts</p>
-              <p className="text-[11px] text-slate-400">
-                Click "Setup Wizard" to connect <span className="text-blue-300 font-mono">info.nextedgeaccesssolutions@gmail.com</span> and <span className="text-blue-300 font-mono">nextedgeaccesssolutions@gmail.com</span> in 5 minutes.
-              </p>
+              {!isClientIdConfigured() ? (
+                <p className="text-[11px] text-slate-400">
+                  Click "Setup Wizard" to configure your OAuth Client ID and connect <span className="text-blue-300 font-mono">info.nextedgeaccesssolutions@gmail.com</span> and <span className="text-blue-300 font-mono">nextedgeaccesssolutions@gmail.com</span> in 5 minutes.
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-400">
+                  Click "Connect Google" to authenticate and start monitoring your emails in real-time.
+                </p>
+              )}
             </div>
           )}
         </div>
