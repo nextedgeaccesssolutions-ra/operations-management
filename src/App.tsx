@@ -926,52 +926,28 @@ function LiveOpsCenter() {
         console.log('[App] Initializing gapi client...');
         setConnectionStatus('initializing-gapi');
         
-        let initAttempts = 0;
-        const maxAttempts = 2;
-        
-        while (initAttempts < maxAttempts) {
-          initAttempts++;
-          console.log(`[App] Initialization attempt ${initAttempts}/${maxAttempts}`);
+        try {
+          await initializeGapi();
+          console.log('[App] ✓ gapi client initialized');
           
-          try {
-            await initializeGapi();
-            console.log('[App] ✓ gapi client initialized');
-            
-            // Verify gapi.client is actually ready after initialization
-            console.log('[App] Verifying gapi.client is ready...');
-            console.log('[App] typeof gapi:', typeof gapi);
-            console.log('[App] typeof gapi.client:', typeof gapi?.client);
-            console.log('[App] gapi.client exists:', gapi?.client !== undefined);
-            
-            if (typeof gapi === 'undefined' || !gapi.client) {
-              console.error('[App] gapi.client is still undefined after initializeGapi()');
-              
-              if (initAttempts < maxAttempts) {
-                console.log('[App] Retrying initialization...');
-                await new Promise(r => setTimeout(r, 500)); // Wait 500ms before retry
-                continue;
-              }
-              
-              throw new Error('Google API client failed to initialize properly after multiple attempts. The gapi.load() callback may not have executed. Please refresh the page and try again. If the problem persists, check browser console for CORS or network errors.');
-            }
-            
-            console.log('[App] ✓ gapi.client verified and ready');
-            break; // Success, exit the retry loop
-            
-          } catch (initErr: any) {
-            console.error(`[App] Failed to initialize gapi (attempt ${initAttempts}):`, initErr);
-            
-            if (initAttempts < maxAttempts) {
-              console.log('[App] Retrying initialization after error...');
-              await new Promise(r => setTimeout(r, 500)); // Wait 500ms before retry
-              continue;
-            }
-            
-            setConnectionStatus('error');
-            setError(initErr?.message || 'Failed to initialize Google API after multiple attempts. Please refresh the page and try again.');
-            setLoading(false);
-            return;
+          // Verify gapi.client is actually ready after initialization
+          console.log('[App] Verifying gapi.client is ready...');
+          console.log('[App] typeof gapi:', typeof gapi);
+          console.log('[App] typeof gapi.client:', typeof gapi?.client);
+          console.log('[App] gapi.client exists:', gapi?.client !== undefined);
+          
+          if (typeof gapi === 'undefined' || !gapi.client) {
+            console.error('[App] gapi.client is still undefined after initializeGapi()');
+            throw new Error('Google API client failed to initialize properly. Please refresh the page and try again.');
           }
+          
+          console.log('[App] ✓ gapi.client verified and ready');
+        } catch (initErr: any) {
+          console.error('[App] Failed to initialize gapi:', initErr);
+          setConnectionStatus('error');
+          setError(initErr?.message || 'Failed to initialize Google API. Please refresh the page and try again.');
+          setLoading(false);
+          return;
         }
       } else {
         console.log('[App] ✓ gapi client already ready');

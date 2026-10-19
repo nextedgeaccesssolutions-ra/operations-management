@@ -47,41 +47,79 @@ export interface Email {
 }
 
 /**
- * Wait for Google API scripts to load in the DOM.
- * NOTE: "[Script error.]" from cross-origin scripts is NORMAL and NOT a failure.
- * We only wait for the script tag's onload event.
+ * Dynamically load Google API scripts on-demand
  */
-function waitForScripts(maxWait: number = 15000): Promise<void> {
+function loadGoogleScripts(): Promise<void> {
   return new Promise((resolve, reject) => {
-    const startTime = Date.now();
+    const loading = window.googleApiLoading;
     
-    const check = () => {
-      const loading = window.googleApiLoading;
-      
-      // Scripts loaded successfully via onload events
-      if (loading?.gapiLoaded && loading?.gisLoaded) {
-        resolve();
-        return;
-      }
-      
-      // Check timeout
-      if (Date.now() - startTime > maxWait) {
-        // Even on timeout, check if gapi/google are available (scripts may have loaded without firing onload)
-        if (typeof gapi !== 'undefined' && typeof google !== 'undefined') {
-          console.warn('Google API scripts available but onload not fired - proceeding anyway');
-          resolve();
-          return;
+    // If already loaded, resolve immediately
+    if (loading?.gapiLoaded && loading?.gisLoaded) {
+      console.log('[Google API] Scripts already loaded');
+      resolve();
+      return;
+    }
+    
+    console.log('[Google API] Loading Google API scripts dynamically...');
+    
+    let gapiLoaded = false;
+    let gisLoaded = false;
+    
+    const checkComplete = () => {
+      if (gapiLoaded && gisLoaded) {
+        if (window.googleApiLoading) {
+          window.googleApiLoading.gapiLoaded = true;
+          window.googleApiLoading.gisLoaded = true;
         }
-        reject(new Error('Google API scripts failed to load. Please check your internet connection and refresh the page.'));
-        return;
+        console.log('[Google API] ✓ All scripts loaded successfully');
+        resolve();
       }
-      
-      // Try again in 200ms
-      setTimeout(check, 200);
     };
     
-    check();
+    // Load gapi script
+    const gapiScript = document.createElement('script');
+    gapiScript.src = 'https://apis.google.com/js/api.js';
+    gapiScript.async = true;
+    gapiScript.onload = () => {
+      console.log('[Google API] ✓ gapi script loaded');
+      gapiLoaded = true;
+      checkComplete();
+    };
+    gapiScript.onerror = (error) => {
+      console.error('[Google API] ✗ gapi script failed to load:', error);
+      reject(new Error('Failed to load Google API client library. Please check your internet connection and try again.'));
+    };
+    document.head.appendChild(gapiScript);
+    
+    // Load GIS script
+    const gisScript = document.createElement('script');
+    gisScript.src = 'https://accounts.google.com/gsi/client';
+    gisScript.async = true;
+    gisScript.onload = () => {
+      console.log('[Google API] ✓ GIS script loaded');
+      gisLoaded = true;
+      checkComplete();
+    };
+    gisScript.onerror = (error) => {
+      console.error('[Google API] ✗ GIS script failed to load:', error);
+      reject(new Error('Failed to load Google Identity Services. Please check your internet connection and try again.'));
+    };
+    document.head.appendChild(gisScript);
+    
+    // Timeout after 15 seconds
+    setTimeout(() => {
+      if (!gapiLoaded || !gisLoaded) {
+        reject(new Error('Google API scripts failed to load within 15 seconds. Please check your internet connection and refresh the page.'));
+      }
+    }, 15000);
   });
+}
+
+/**
+ * Wait for Google API scripts to load (now uses dynamic loading)
+ */
+function waitForScripts(maxWait: number = 15000): Promise<void> {
+  return loadGoogleScripts();
 }
 
 /**
@@ -110,41 +148,49 @@ export async function initializeGapi(): Promise<void> {
       // Without 'client', gapi.client will be undefined
       gapi.load('client', async () => {
         console.log('[Google API] gapi.load callback executed');
-        console.log('[Google API] Checking if gapi.client exists...');
-        console.log('[Google API] typeof gapi.client:', typeof gapi.client);
         
-        // Sometimes gapi.client might not be immediately available
-        // Add a small delay to ensure it's ready
-        await new Promise(r => setTimeout(r, 100));
+        // Retry mechanism: gapi.client might not be immediately available
+        const maxRetries = 5;
+        let retryCount = 0;
         
-        console.log('[Google API] After delay, checking gapi.client again...');
-        console.log('[Google API] typeof gapi.client:', typeof gapi.client);
-        
-        try {
-          // Verify gapi.client exists after loading
-          if (!gapi.client) {
-            console.error('[Google API] gapi.client is undefined after gapi.load callback');
-            reject(new Error('gapi.client is undefined after load. The Google API client library failed to initialize. Please refresh the page and try again. If the problem persists, check browser console for CORS or network errors.'));
-            return;
-          }
-
-          console.log('[Google API] ✓ gapi.client exists, calling gapi.client.init()...');
-
-          // Initialize the client with discovery docs
-          await gapi.client.init({
-            discoveryDocs: [
-              'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest',
-              'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest',
-            ],
-          });
+        const checkClient = async () => {
+          retryCount++;
+          console.log(`[Google API] Checking gapi.client (attempt ${retryCount}/${maxRetries})...`);
+          console.log('[Google API] typeof gapi:', typeof gapi);
+          console.log('[Google API] typeof gapi.client:', typeof gapi?.client);
           
-          console.log('[Google API] ✓ gapi.client.init() completed successfully');
-          gapiInited = true;
-          resolve();
-        } catch (error: any) {
-          console.error('[Google API] GAPI client init error:', error);
-          reject(new Error(error.message || 'Failed to initialize Google API client'));
-        }
+          if (gapi.client) {
+            console.log('[Google API] ✓ gapi.client is available');
+            
+            try {
+              console.log('[Google API] Calling gapi.client.init()...');
+              
+              // Initialize the client with discovery docs
+              await gapi.client.init({
+                discoveryDocs: [
+                  'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest',
+                  'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest',
+                ],
+              });
+              
+              console.log('[Google API] ✓ gapi.client.init() completed successfully');
+              gapiInited = true;
+              resolve();
+            } catch (error: any) {
+              console.error('[Google API] GAPI client init error:', error);
+              reject(new Error(error.message || 'Failed to initialize Google API client'));
+            }
+          } else if (retryCount < maxRetries) {
+            console.log('[Google API] gapi.client not ready yet, retrying in 200ms...');
+            setTimeout(checkClient, 200);
+          } else {
+            console.error('[Google API] ✗ gapi.client failed to initialize after', maxRetries, 'attempts');
+            reject(new Error('gapi.client failed to initialize after multiple attempts. The Google API client library did not load properly. Please refresh the page and try again. If the problem persists, check your internet connection and browser console for errors.'));
+          }
+        };
+        
+        // Start checking
+        checkClient();
       });
       
       console.log('[Google API] gapi.load() called successfully, waiting for callback...');
