@@ -113,18 +113,22 @@ export function initializeGis(): Promise<void> {
     }
 
     try {
+      // Initialize token client (callback is just for initialization confirmation)
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: SCOPES,
         callback: (response: any) => {
+          // This callback is called after initialization
           if (response.error) {
-            reject(new Error(response.error_description || 'OAuth authentication failed'));
+            console.error('GIS init error:', response.error);
           } else {
             gisInited = true;
-            resolve();
           }
         },
       });
+      
+      // Resolve immediately after creating the client
+      resolve();
     } catch (error: any) {
       reject(new Error(error.message || 'Failed to initialize Google Identity Services'));
     }
@@ -137,31 +141,39 @@ export function initializeGis(): Promise<void> {
 export function requestToken(): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!tokenClient) {
-      reject(new Error('Token client not initialized'));
+      reject(new Error('Token client not initialized. Please refresh the page and try again.'));
       return;
     }
 
-    if (gapi.client.getToken() === null) {
-      tokenClient.requestAccessToken({ prompt: 'consent' });
-    } else {
-      tokenClient.requestAccessToken({ prompt: '' });
-    }
+    // Set up timeout
+    const timeoutId = setTimeout(() => {
+      reject(new Error('Connection timeout. Please try again.'));
+    }, 60000);
 
-    // Wait for callback
-    const checkToken = setInterval(() => {
-      if (gapi.client.getToken() !== null) {
-        clearInterval(checkToken);
+    // Override the callback for this specific request
+    tokenClient.callback = (response: any) => {
+      clearTimeout(timeoutId);
+      
+      if (response.error) {
+        reject(new Error(response.error_description || 'Authentication failed'));
+      } else {
+        // Token received successfully
+        gapi.client.setToken(response);
         resolve();
       }
-    }, 100);
+    };
 
-    // Timeout after 30 seconds
-    setTimeout(() => {
-      clearInterval(checkToken);
+    try {
+      // Request the token - this will trigger the callback
       if (gapi.client.getToken() === null) {
-        reject(new Error('Token request timeout'));
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+      } else {
+        tokenClient.requestAccessToken({ prompt: '' });
       }
-    }, 30000);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      reject(new Error(error.message || 'Failed to request access token'));
+    }
   });
 }
 

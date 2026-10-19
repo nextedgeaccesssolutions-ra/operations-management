@@ -887,24 +887,44 @@ function LiveOpsCenter() {
         return;
       }
       
+      // Request token - this will open the Google auth popup
+      // Add a small delay to ensure UI updates before popup opens
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       await requestToken();
+      
+      // Verify we got a token
+      if (!isAuthenticated()) {
+        throw new Error('Authentication completed but no token received. Please try again.');
+      }
+      
       setGoogleConnected(true);
       
+      // Get user email
       const email = await getUserEmail();
       setUserEmail(email);
       
+      // Load emails
       await loadRealEmails();
+      
+      // Switch to emails tab
+      setActiveTab('emails');
+      
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to connect to Google';
       
       // Provide helpful error messages
-      if (errorMessage.includes('popup')) {
+      if (errorMessage.includes('popup') || errorMessage.includes('blocked')) {
         setError('Pop-up was blocked. Please allow pop-ups for this site and try again.');
-      } else if (errorMessage.includes('access_denied')) {
+      } else if (errorMessage.includes('access_denied') || errorMessage.includes('denied')) {
         setError('Access was denied. Please try again and grant the required permissions.');
       } else if (errorMessage.includes('invalid_client')) {
         setError('Invalid OAuth Client ID. Please check your configuration in the Setup Wizard.');
         setActiveTab('setup');
+      } else if (errorMessage.includes('timeout')) {
+        setError('Connection timed out. Please check your internet connection and try again.');
+      } else if (errorMessage.includes('popup_closed')) {
+        setError('Authentication window was closed. Please try again.');
       } else {
         setError(errorMessage);
       }
@@ -1287,7 +1307,12 @@ function LiveOpsCenter() {
                     disabled={loading}
                     className="px-4 py-2 rounded-xl text-xs font-semibold bg-green-500/20 border border-green-500/30 text-green-300 hover:bg-green-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {loading ? 'Connecting...' : '🔗 Connect Google'}
+                    {loading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin">⏳</span>
+                        Connecting... (Check popup)
+                      </span>
+                    ) : '🔗 Connect Google'}
                   </button>
                 )}
               </>
@@ -1328,9 +1353,12 @@ function LiveOpsCenter() {
                   Click "Setup Wizard" to configure your OAuth Client ID and connect <span className="text-blue-300 font-mono">info.nextedgeaccesssolutions@gmail.com</span> and <span className="text-blue-300 font-mono">nextedgeaccesssolutions@gmail.com</span> in 5 minutes.
                 </p>
               ) : (
-                <p className="text-[11px] text-slate-400">
-                  Click "Connect Google" to authenticate and start monitoring your emails in real-time.
-                </p>
+                <div className="text-[11px] text-slate-400 space-y-1">
+                  <p>Click "Connect Google" to authenticate and start monitoring your emails in real-time.</p>
+                  <p className="text-amber-300/80">
+                    <span className="font-semibold">⚠️ Important:</span> A Google sign-in popup will appear. Please allow pop-ups for this site and complete the authentication.
+                  </p>
+                </div>
               )}
             </div>
           )}
