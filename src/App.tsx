@@ -816,32 +816,16 @@ function LiveOpsCenter() {
     
     const initGoogle = async () => {
       try {
-        // Wait for scripts to load (with timeout)
-        const startTime = Date.now();
-        while (!isGoogleApiLoaded() && Date.now() - startTime < 15000) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
-
-        if (cancelled) return;
-
-        // Check if scripts loaded (either via onload or globals exist)
-        const scriptsLoaded = isGoogleApiLoaded();
+        console.log('[App] Starting Google API initialization on mount...');
         
-        if (!scriptsLoaded) {
-          console.warn('Google API scripts not loaded after 15s - user can still use demo mode');
-          setGoogleApiReady(false);
-          return;
-        }
-
-        if (cancelled) return;
-        setGoogleApiReady(true);
-        
-        // Initialize gapi client (this calls gapi.load('client', callback))
+        // Try to initialize gapi (this will load scripts if needed)
         try {
           await initializeGapi();
+          console.log('[App] ✓ GAPI initialized successfully');
         } catch (gapiError: any) {
-          console.error('Failed to initialize GAPI:', gapiError?.message || gapiError);
-          // Don't return - user can still see the UI and try to connect manually
+          console.warn('Failed to initialize GAPI on mount:', gapiError?.message || gapiError);
+          // Don't set googleApiReady to false - user can still try to connect manually
+          setGoogleApiReady(false);
           return;
         }
         
@@ -850,8 +834,12 @@ function LiveOpsCenter() {
         // Check if gapi is ready after initialization
         if (!isGapiReady()) {
           console.warn('Google API client not ready after initialization');
+          setGoogleApiReady(false);
           return;
         }
+        
+        setGoogleApiReady(true);
+        console.log('[App] ✓ Google API ready');
         
         if (isClientIdConfigured()) {
           try {
@@ -897,16 +885,8 @@ function LiveOpsCenter() {
       setError(null);
       setConnectionStatus('checking');
       
-      // Check if Google API scripts are loaded
-      console.log('[App] Checking if Google API is loaded...');
-      if (!isGoogleApiLoaded()) {
-        console.error('[App] Google API not loaded');
-        setConnectionStatus('error');
-        setError('Google API scripts are still loading. Please wait a few seconds and try again.');
-        setLoading(false);
-        return;
-      }
-      console.log('[App] ✓ Google API loaded');
+      // Don't check isGoogleApiLoaded() here - let initializeGapi() handle script loading
+      console.log('[App] Starting Google connection process...');
       setConnectionStatus('initializing');
       
       // Check if client ID is configured
@@ -1416,7 +1396,7 @@ function LiveOpsCenter() {
                 >
                   🔧 Setup Wizard
                 </button>
-                {isClientIdConfigured() && googleApiReady && (
+                {isClientIdConfigured() && (
                   <button
                     onClick={handleConnectGoogle}
                     disabled={loading}
@@ -1518,6 +1498,9 @@ function LiveOpsCenter() {
                   <p>Click "Connect Google" to authenticate and start monitoring your emails in real-time.</p>
                   <p className="text-amber-300/80">
                     <span className="font-semibold">⚠️ Important:</span> A Google sign-in popup will appear. Please allow pop-ups for this site and complete the authentication.
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Google API scripts will be loaded automatically when you click "Connect Google".
                   </p>
                 </div>
               )}
