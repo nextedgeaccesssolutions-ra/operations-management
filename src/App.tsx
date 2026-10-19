@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { AuthProvider, useAuth, type User } from './AuthContext';
 import AuthPage from './AuthPage';
 import {
@@ -211,15 +211,12 @@ function OfficeFloorPlan({ onRoomSelect, selectedRoom }: { onRoomSelect: (roomId
       </div>
       
       <div className="relative bg-slate-900/50 rounded-xl border border-slate-700/30 p-4 overflow-hidden" style={{ minHeight: '340px' }}>
-        {/* Grid background */}
         <div className="absolute inset-0 opacity-20" style={{
           backgroundImage: 'linear-gradient(rgba(59,130,246,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.1) 1px, transparent 1px)',
           backgroundSize: '20px 20px'
         }} />
         
-        {/* Rooms */}
         <div className="relative grid grid-cols-4 gap-2" style={{ gridTemplateRows: 'repeat(5, 1fr)' }}>
-          {/* Reception - spans full width */}
           <div
             className={`office-room col-span-4 rounded-lg p-3 flex items-center justify-between ${selectedRoom === 'reception' ? 'active' : ''}`}
             style={{ backgroundColor: '#6366f120', border: '1px solid #6366f140' }}
@@ -232,7 +229,6 @@ function OfficeFloorPlan({ onRoomSelect, selectedRoom }: { onRoomSelect: (roomId
             <span className="text-[10px] text-slate-400">Welcome Area</span>
           </div>
 
-          {/* Row 1: Executive, Operations, Finance, Break Room */}
           <div
             className={`office-room rounded-lg p-3 flex flex-col items-center justify-center ${selectedRoom === 'exec-desk' ? 'active' : ''}`}
             style={{ backgroundColor: '#8b5cf620', border: '1px solid #8b5cf640' }}
@@ -276,7 +272,6 @@ function OfficeFloorPlan({ onRoomSelect, selectedRoom }: { onRoomSelect: (roomId
             <span className="text-[9px] text-slate-400 mt-1">3 people</span>
           </div>
 
-          {/* Row 2: Sales, Procurement, Safety */}
           <div
             className={`office-room rounded-lg p-3 flex flex-col items-center justify-center ${selectedRoom === 'sales-desk' ? 'active' : ''}`}
             style={{ backgroundColor: '#f59e0b20', border: '1px solid #f59e0b40' }}
@@ -311,7 +306,6 @@ function OfficeFloorPlan({ onRoomSelect, selectedRoom }: { onRoomSelect: (roomId
             </div>
           </div>
 
-          {/* Row 3: People, Customer, Summit Room */}
           <div
             className={`office-room rounded-lg p-3 flex flex-col items-center justify-center ${selectedRoom === 'people-desk' ? 'active' : ''}`}
             style={{ backgroundColor: '#ec489920', border: '1px solid #ec489940' }}
@@ -389,7 +383,6 @@ function ChatPanel({ userName, userAvatar }: { userName: string; userAvatar: str
 
   return (
     <div className="glass-card rounded-2xl flex flex-col h-full overflow-hidden">
-      {/* Channel tabs */}
       <div className="p-3 border-b border-slate-700/30">
         <div className="flex items-center gap-1 overflow-x-auto">
           {chatChannels.map(ch => (
@@ -414,7 +407,6 @@ function ChatPanel({ userName, userAvatar }: { userName: string; userAvatar: str
         </div>
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ maxHeight: '300px' }}>
         {filteredMessages.map(msg => (
           <div key={msg.id} className={`chat-bubble flex gap-2.5 ${msg.isSystem ? 'opacity-70' : ''}`}>
@@ -437,7 +429,6 @@ function ChatPanel({ userName, userAvatar }: { userName: string; userAvatar: str
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <div className="p-3 border-t border-slate-700/30">
         <div className="flex items-center gap-2">
           <input
@@ -723,7 +714,7 @@ function UserMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
 
 // ============ Sidebar Navigation ============
 
-type ViewType = 'floor' | 'departments' | 'chat' | 'meetings' | 'activity' | 'admin';
+type ViewType = 'floor' | 'departments' | 'chat' | 'meetings' | 'activity' | 'admin' | 'liveops';
 
 function Sidebar({ activeView, onViewChange, notificationCount }: {
   activeView: ViewType;
@@ -731,6 +722,7 @@ function Sidebar({ activeView, onViewChange, notificationCount }: {
   notificationCount: number;
 }) {
   const items: { id: ViewType; icon: string; label: string; badge?: number }[] = [
+    { id: 'liveops', icon: '🚀', label: 'Live Ops Center' },
     { id: 'floor', icon: '🏢', label: 'Floor Plan' },
     { id: 'departments', icon: '👥', label: 'Departments' },
     { id: 'admin', icon: '🎛️', label: 'Admin Panel' },
@@ -741,7 +733,6 @@ function Sidebar({ activeView, onViewChange, notificationCount }: {
 
   return (
     <div className="w-16 lg:w-56 flex-shrink-0 bg-slate-900/50 border-r border-slate-800/50 flex flex-col">
-      {/* Logo */}
       <div className="p-4 border-b border-slate-800/50">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
@@ -754,7 +745,6 @@ function Sidebar({ activeView, onViewChange, notificationCount }: {
         </div>
       </div>
 
-      {/* Nav items */}
       <nav className="flex-1 p-2 space-y-1">
         {items.map(item => (
           <button
@@ -775,13 +765,390 @@ function Sidebar({ activeView, onViewChange, notificationCount }: {
         ))}
       </nav>
 
-      {/* Bottom section */}
       <div className="p-3 border-t border-slate-800/50">
         <div className="hidden lg:flex items-center gap-2 px-2 py-2 rounded-lg bg-slate-800/30">
           <span className="w-2 h-2 rounded-full bg-green-500 status-pulse" />
           <span className="text-[10px] text-slate-400">System Online</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============ Live Operations Center ============
+
+function LiveOpsCenter() {
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [activeTab, setActiveTab] = useState<'emails' | 'sheets' | 'platform' | 'autoreply'>('emails');
+  const [emails, setEmails] = useState(initialEmails);
+  const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+
+  const monitoredAccounts = [
+    'info.nextedgeaccesssolutions@gmail.com',
+    'nextedgeaccesssolutions@gmail.com',
+  ];
+
+  const sheets = [
+    {
+      id: 'marketing',
+      name: 'Marketing Data',
+      url: 'https://docs.google.com/spreadsheets/d/1zFWIjmKYJe9T0_h32IU23CiBOYuo-TVZY3MNHfTNf8A/edit',
+      icon: '📊',
+      lastSync: '2 min ago',
+      status: 'live',
+    },
+    {
+      id: 'hr-finance',
+      name: 'HR & Finance',
+      url: 'https://docs.google.com/spreadsheets/d/1hOf_eByDKcv6GEQiz44s37xqzf-cbbHY0kTVBZikEDE/edit',
+      icon: '💼',
+      lastSync: '5 min ago',
+      status: 'live',
+    },
+  ];
+
+  const platforms = [
+    {
+      id: 'neas-platform',
+      name: 'NEAS Platform',
+      url: 'https://neas-platform-preview.vercel.app/login',
+      icon: '🌐',
+      status: 'online',
+      uptime: '99.97%',
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Hero Header */}
+      <div className="glass-card rounded-2xl p-6 border-gradient-to-r from-blue-500/20 to-purple-500/20">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl shadow-lg shadow-blue-500/30">
+              🚀
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-1">Live Operations Center</h2>
+              <p className="text-sm text-slate-400">24/7 Email Monitoring · Auto-Reply · Real-Time Sheets · Platform Monitoring</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className={`px-4 py-2 rounded-xl border ${googleConnected ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+              <div className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${googleConnected ? 'bg-green-500 status-pulse' : 'bg-red-500'}`} />
+                <span className={`text-xs font-semibold ${googleConnected ? 'text-green-400' : 'text-red-400'}`}>
+                  {googleConnected ? 'Google Connected' : 'Not Connected'}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setGoogleConnected(!googleConnected)}
+              className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                googleConnected
+                  ? 'bg-slate-800/60 border-slate-700/50 text-slate-300 hover:border-slate-600/50'
+                  : 'bg-blue-500/20 border-blue-500/30 text-blue-300 hover:bg-blue-500/30'
+              }`}
+            >
+              {googleConnected ? 'Disconnect' : 'Connect Google'}
+            </button>
+          </div>
+        </div>
+
+        {/* Monitored Accounts */}
+        <div className="mt-5 p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium mb-2">Monitored Email Accounts</p>
+          <div className="flex flex-wrap gap-2">
+            {monitoredAccounts.map(account => (
+              <div key={account} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-700/30 border border-slate-600/30">
+                <span className="w-2 h-2 rounded-full bg-green-500 status-pulse" />
+                <span className="text-xs text-slate-300 font-mono">{account}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1 bg-slate-800/50 rounded-xl p-1.5 border border-slate-700/50 w-fit">
+        {([
+          { id: 'emails' as const, label: 'Email Monitor', icon: '📧', count: emails.filter(e => e.status === 'unread').length },
+          { id: 'sheets' as const, label: 'Google Sheets', icon: '📊' },
+          { id: 'platform' as const, label: 'Platform Monitor', icon: '🌐' },
+          { id: 'autoreply' as const, label: 'Auto-Reply', icon: '🤖' },
+        ]).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+              activeTab === tab.id
+                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/30'
+            }`}
+          >
+            <span>{tab.icon}</span>
+            <span>{tab.label}</span>
+            {tab.count !== undefined && tab.count > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-blue-500/30 text-blue-200">
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'emails' && (
+        <div className="space-y-4">
+          <div className="glass-card rounded-2xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-red-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M1.5 8.5l10.5 7 10.5-7M2 17h20V5H2v12zm0 2h20v1H2v-1z"/>
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-white">Gmail API Monitoring</p>
+                <p className="text-[10px] text-slate-500">Polling every 30 seconds · IMAP fallback available</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 font-medium">
+                🔴 {emails.filter(e => e.priority === 'urgent').length} urgent
+              </span>
+              <span className="px-3 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-400 font-medium">
+                📬 {emails.filter(e => e.status === 'unread').length} unread
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              {emails.map(email => (
+                <div
+                  key={email.id}
+                  onClick={() => setSelectedEmail(email.id)}
+                  className={`glass-card rounded-xl p-4 cursor-pointer transition-all ${
+                    selectedEmail === email.id ? 'border-blue-500/40! bg-blue-500/5!' : ''
+                  } ${email.status === 'unread' ? 'border-l-2 border-l-blue-500' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-2">
+                      {email.priority === 'urgent' && <span className="text-red-400 text-[10px]">🔴</span>}
+                      <span className="text-xs font-semibold text-white">{email.from}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 whitespace-nowrap">{email.timestamp}</span>
+                  </div>
+                  <p className={`text-xs mb-1 ${email.status === 'unread' ? 'text-white font-medium' : 'text-slate-300'}`}>
+                    {email.subject}
+                  </p>
+                  <p className="text-[11px] text-slate-500 truncate">{email.preview}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    {email.labels.map(label => (
+                      <span key={label} className="px-1.5 py-0.5 rounded text-[9px] bg-slate-700/50 text-slate-400 border border-slate-600/30">
+                        {label}
+                      </span>
+                    ))}
+                    {email.hasAttachment && <span className="text-[10px] text-slate-500">📎</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="glass-card rounded-2xl p-5">
+              {selectedEmail ? (
+                (() => {
+                  const email = emails.find(e => e.id === selectedEmail);
+                  if (!email) return null;
+                  return (
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-sm font-bold text-white mb-2">{email.subject}</h3>
+                        <div className="flex items-center gap-2 text-xs text-slate-400">
+                          <span>From: <span className="text-slate-200">{email.from}</span></span>
+                          <span className="text-slate-600">&lt;{email.fromEmail}&gt;</span>
+                        </div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                        <p className="text-xs text-slate-300 leading-relaxed">{email.body}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {email.labels.map(label => (
+                          <span key={label} className="px-2 py-1 rounded-md text-[10px] bg-slate-700/50 text-slate-300 border border-slate-600/30">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-700/30">
+                        <button className="px-3 py-1.5 rounded-lg text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors font-medium">
+                          ✓ Mark Read
+                        </button>
+                        <button className="px-3 py-1.5 rounded-lg text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors font-medium">
+                          ↩ Reply as CEO
+                        </button>
+                        <button className="px-3 py-1.5 rounded-lg text-[10px] bg-slate-500/10 text-slate-400 border border-slate-500/20 hover:bg-slate-500/20 transition-colors font-medium">
+                          📁 Archive
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="flex flex-col items-center justify-center h-96 text-center">
+                  <span className="text-5xl mb-4">📧</span>
+                  <p className="text-sm text-slate-400 mb-2">Select an email to view</p>
+                  <p className="text-[10px] text-slate-600">Monitoring {emails.length} emails from 2 accounts</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'sheets' && (
+        <div className="space-y-4">
+          {sheets.map(sheet => (
+            <div key={sheet.id} className="glass-card rounded-2xl p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-slate-800/50 border border-slate-700/30 flex items-center justify-center text-2xl">
+                    {sheet.icon}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">{sheet.name}</h3>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">{sheet.url}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-lg bg-green-500/10 border border-green-500/20 text-[10px] text-green-400 font-medium">
+                    ● Live
+                  </span>
+                  <span className="text-[10px] text-slate-500">Synced {sheet.lastSync}</span>
+                </div>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                <p className="text-xs text-slate-400 mb-3">Live data preview (requires Google Sheets API connection)</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg bg-slate-700/30 border border-slate-600/20">
+                    <p className="text-[10px] text-slate-500 mb-1">Total Rows</p>
+                    <p className="text-lg font-bold text-white">--</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-700/30 border border-slate-600/20">
+                    <p className="text-[10px] text-slate-500 mb-1">Columns</p>
+                    <p className="text-lg font-bold text-white">--</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-700/30 border border-slate-600/20">
+                    <p className="text-[10px] text-slate-500 mb-1">Last Update</p>
+                    <p className="text-lg font-bold text-white">{sheet.lastSync}</p>
+                  </div>
+                </div>
+              </div>
+              <a
+                href={sheet.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-400 font-medium hover:bg-blue-500/20 transition-colors"
+              >
+                Open in Google Sheets ↗
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'platform' && (
+        <div className="space-y-4">
+          {platforms.map(platform => (
+            <div key={platform.id} className="glass-card rounded-2xl p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-slate-800/50 border border-slate-700/30 flex items-center justify-center text-2xl">
+                    {platform.icon}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">{platform.name}</h3>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">{platform.url}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-lg bg-green-500/10 border border-green-500/20 text-[10px] text-green-400 font-medium">
+                    ● {platform.status}
+                  </span>
+                  <span className="text-[10px] text-slate-500">Uptime: {platform.uptime}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/20">
+                  <p className="text-[10px] text-slate-500 mb-1">Response Time</p>
+                  <p className="text-lg font-bold text-green-400">142ms</p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/20">
+                  <p className="text-[10px] text-slate-500 mb-1">Status Code</p>
+                  <p className="text-lg font-bold text-green-400">200</p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/20">
+                  <p className="text-[10px] text-slate-500 mb-1">Last Check</p>
+                  <p className="text-lg font-bold text-white">Just now</p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/20">
+                  <p className="text-[10px] text-slate-500 mb-1">SSL Cert</p>
+                  <p className="text-lg font-bold text-green-400">Valid</p>
+                </div>
+              </div>
+              <a
+                href={platform.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-400 font-medium hover:bg-blue-500/20 transition-colors"
+              >
+                Open Platform ↗
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'autoreply' && (
+        <div className="space-y-4">
+          <div className="glass-card rounded-2xl p-6">
+            <h3 className="text-sm font-bold text-white mb-4">CEO Auto-Reply Templates</h3>
+            <div className="space-y-3">
+              {[
+                {
+                  trigger: 'Customer Inquiry',
+                  template: 'Thank you for reaching out to Next Edge Access Solutions. I\'ve received your message and will review it personally. Our team will respond within 24 hours with a comprehensive solution.',
+                  tone: 'Professional & Reassuring',
+                },
+                {
+                  trigger: 'Urgent Issue',
+                  template: 'I understand the urgency of this matter. I\'m personally overseeing this situation and have escalated it to our senior team. You\'ll hear from us within 2 hours with a resolution plan.',
+                  tone: 'Urgent & Action-Oriented',
+                },
+                {
+                  trigger: 'Partnership Inquiry',
+                  template: 'Thank you for your interest in partnering with NEAS. I\'d welcome the opportunity to discuss how we can create value together. Let\'s schedule a call this week.',
+                  tone: 'Strategic & Open',
+                },
+              ].map((item, i) => (
+                <div key={i} className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-white">{item.trigger}</span>
+                    <span className="px-2 py-0.5 rounded text-[9px] bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                      {item.tone}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed italic">"{item.template}"</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+              <p className="text-[11px] text-amber-300 font-medium mb-1">⚠️ Auto-Reply Status</p>
+              <p className="text-[10px] text-slate-400">
+                Auto-reply is currently <span className="text-amber-400 font-semibold">DISABLED</span>. Connect Google API to enable automated CEO-style responses.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -807,8 +1174,8 @@ function AdminController() {
       )
     );
   });
-  const [emails, setEmails] = useState<MonitoredEmail[]>(initialEmails);
-  const [logs, setLogs] = useState<AdminLog[]>(initialAdminLogs);
+  const [emails, setEmails] = useState(initialEmails);
+  const [logs, setLogs] = useState(initialAdminLogs);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [taskFilter, setTaskFilter] = useState<TaskStatus | 'all'>('all');
   const [emailFilter, setEmailFilter] = useState<'all' | 'unread' | 'urgent'>('all');
@@ -878,7 +1245,6 @@ function AdminController() {
 
   return (
     <div className="space-y-6">
-      {/* Admin Header */}
       <div className="glass-card rounded-2xl p-6 border-blue-500/20!">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -902,7 +1268,6 @@ function AdminController() {
           </div>
         </div>
 
-        {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-5">
           <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
             <p className="text-lg font-bold text-blue-400">{runningTasks}</p>
@@ -927,7 +1292,6 @@ function AdminController() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex items-center gap-1 bg-slate-800/50 rounded-xl p-1.5 border border-slate-700/50 w-fit">
         {([
           { id: 'tasks' as AdminTab, label: 'All Tasks', icon: '📋', count: allTasks.length },
@@ -957,10 +1321,8 @@ function AdminController() {
         ))}
       </div>
 
-      {/* Tab Content */}
       {activeTab === 'tasks' && (
         <div className="space-y-4">
-          {/* Filters */}
           <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
             <input
               type="text"
@@ -986,7 +1348,6 @@ function AdminController() {
             </div>
           </div>
 
-          {/* Task Table */}
           <div className="glass-card rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -1047,24 +1408,6 @@ function AdminController() {
                               ▶
                             </button>
                           )}
-                          {task.status === 'running' && (
-                            <button
-                              onClick={() => handleTaskAction(task.id, 'queued')}
-                              className="px-2 py-1 rounded text-[9px] bg-slate-500/10 text-slate-400 border border-slate-500/20 hover:bg-slate-500/20 transition-colors"
-                              title="Pause"
-                            >
-                              ⏸
-                            </button>
-                          )}
-                          {task.status === 'awaiting-sign-off' && (
-                            <button
-                              onClick={() => handleTaskAction(task.id, 'completed')}
-                              className="px-2 py-1 rounded text-[9px] bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
-                              title="Approve"
-                            >
-                              ✓
-                            </button>
-                          )}
                           {task.status !== 'completed' && task.status !== 'cancelled' && (
                             <button
                               onClick={() => handleTaskAction(task.id, 'completed')}
@@ -1101,7 +1444,6 @@ function AdminController() {
 
       {activeTab === 'email' && (
         <div className="space-y-4">
-          {/* Email Connection Status */}
           <div className="glass-card rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
@@ -1139,7 +1481,6 @@ function AdminController() {
             </div>
           </div>
 
-          {/* Email Filters */}
           <div className="flex items-center gap-2">
             {(['all', 'unread', 'urgent'] as const).map(filter => (
               <button
@@ -1156,9 +1497,7 @@ function AdminController() {
             ))}
           </div>
 
-          {/* Email List */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Email List */}
             <div className="space-y-2">
               {filteredEmails.map(email => (
                 <div
@@ -1200,7 +1539,6 @@ function AdminController() {
               ))}
             </div>
 
-            {/* Email Detail */}
             <div className="glass-card rounded-2xl p-5">
               {selectedEmail ? (
                 (() => {
@@ -1414,7 +1752,7 @@ function AdminController() {
 
 function OfficeDashboard() {
   const { user, logout } = useAuth();
-  const [activeView, setActiveView] = useState<ViewType>('floor');
+  const [activeView, setActiveView] = useState<ViewType>('liveops');
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [presence, setPresence] = useState<PresenceStatus>('available');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -1423,12 +1761,14 @@ function OfficeDashboard() {
 
   const renderContent = () => {
     switch (activeView) {
+      case 'liveops':
+        return <LiveOpsCenter />;
+
       case 'floor':
         return (
           <div>
             <OfficeFloorPlan onRoomSelect={setSelectedRoom} selectedRoom={selectedRoom} />
             
-            {/* Selected Room Detail */}
             {selectedRoom && (
               <div className="glass-card rounded-2xl p-5 mb-6 animate-fade-in-up">
                 <div className="flex items-center justify-between mb-3">
@@ -1497,11 +1837,9 @@ function OfficeDashboard() {
               </div>
             )}
 
-            {/* Quick Stats */}
             <StatsBar />
             <SignOffBanner />
             
-            {/* Online Agents */}
             <div className="glass-card rounded-2xl p-5">
               <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                 <span className="text-green-400">●</span> Who's Online
@@ -1595,6 +1933,9 @@ function OfficeDashboard() {
           </div>
         );
 
+      case 'admin':
+        return <AdminController />;
+
       case 'chat':
         return (
           <div className="max-w-2xl mx-auto">
@@ -1676,28 +2017,23 @@ function OfficeDashboard() {
             <ActivityFeedPanel />
           </div>
         );
-
-      case 'admin':
-        return <AdminController />;
     }
   };
 
   return (
     <div className="min-h-screen flex floor-grid">
-      {/* Sidebar */}
       <Sidebar
         activeView={activeView}
         onViewChange={setActiveView}
         notificationCount={9}
       />
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Bar */}
         <header className="sticky top-0 z-30 bg-slate-900/80 backdrop-blur-xl border-b border-slate-800/50 px-6 py-3">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-white">
+                {activeView === 'liveops' && '🚀 Live Operations Center'}
                 {activeView === 'floor' && '🏢 Office Floor'}
                 {activeView === 'departments' && '👥 Departments'}
                 {activeView === 'admin' && '🎛️ Admin Controller'}
@@ -1706,6 +2042,7 @@ function OfficeDashboard() {
                 {activeView === 'activity' && '📊 Activity'}
               </h2>
               <p className="text-[10px] text-slate-500 mt-0.5">
+                {activeView === 'liveops' && '24/7 email monitoring, auto-reply, sheets, and platform tracking'}
                 {activeView === 'floor' && 'Interactive office layout with live agent positions'}
                 {activeView === 'departments' && 'All departments and agent task queues'}
                 {activeView === 'admin' && 'Centralized task management & email monitoring'}
@@ -1721,11 +2058,9 @@ function OfficeDashboard() {
           </div>
         </header>
 
-        {/* Content */}
         <main className="flex-1 p-6 overflow-y-auto">
           {renderContent()}
 
-          {/* Footer */}
           <footer className="mt-12 pt-6 border-t border-slate-800/50">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <p className="text-xs text-slate-600">
@@ -1743,8 +2078,6 @@ function OfficeDashboard() {
     </div>
   );
 }
-
-// ============ App Content ============
 
 function AppContent() {
   const { user, loading } = useAuth();
