@@ -90,26 +90,45 @@ function waitForScripts(maxWait: number = 15000): Promise<void> {
  * to load the client library. Without it, gapi.client is undefined.
  */
 export async function initializeGapi(): Promise<void> {
+  console.log('[Google API] Starting GAPI initialization...');
+  
   // Wait for scripts to load
   await waitForScripts();
   
   return new Promise((resolve, reject) => {
     // Check if gapi is loaded
     if (typeof gapi === 'undefined') {
+      console.error('[Google API] gapi is undefined');
       reject(new Error('Google API library not loaded. Please refresh the page.'));
       return;
     }
+
+    console.log('[Google API] gapi exists, calling gapi.load("client", callback)...');
 
     try {
       // CRITICAL FIX: Must pass 'client' as first argument to load the client library
       // Without 'client', gapi.client will be undefined
       gapi.load('client', async () => {
+        console.log('[Google API] gapi.load callback executed');
+        console.log('[Google API] Checking if gapi.client exists...');
+        console.log('[Google API] typeof gapi.client:', typeof gapi.client);
+        
+        // Sometimes gapi.client might not be immediately available
+        // Add a small delay to ensure it's ready
+        await new Promise(r => setTimeout(r, 100));
+        
+        console.log('[Google API] After delay, checking gapi.client again...');
+        console.log('[Google API] typeof gapi.client:', typeof gapi.client);
+        
         try {
           // Verify gapi.client exists after loading
           if (!gapi.client) {
-            reject(new Error('gapi.client is undefined after load. Please refresh the page.'));
+            console.error('[Google API] gapi.client is undefined after gapi.load callback');
+            reject(new Error('gapi.client is undefined after load. The Google API client library failed to initialize. Please refresh the page and try again. If the problem persists, check browser console for CORS or network errors.'));
             return;
           }
+
+          console.log('[Google API] ✓ gapi.client exists, calling gapi.client.init()...');
 
           // Initialize the client with discovery docs
           await gapi.client.init({
@@ -118,15 +137,19 @@ export async function initializeGapi(): Promise<void> {
               'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest',
             ],
           });
+          
+          console.log('[Google API] ✓ gapi.client.init() completed successfully');
           gapiInited = true;
           resolve();
         } catch (error: any) {
-          console.error('GAPI client init error:', error);
+          console.error('[Google API] GAPI client init error:', error);
           reject(new Error(error.message || 'Failed to initialize Google API client'));
         }
       });
+      
+      console.log('[Google API] gapi.load() called successfully, waiting for callback...');
     } catch (error: any) {
-      console.error('gapi.load error:', error);
+      console.error('[Google API] gapi.load error:', error);
       reject(new Error(error.message || 'Failed to load Google API client'));
     }
   });
@@ -233,7 +256,7 @@ export function initializeGis(): Promise<void> {
  * Request OAuth token - opens Google sign-in popup
  */
 export function requestToken(): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     console.log('[Google API] Requesting OAuth token...');
     
     // Verify token client exists
@@ -246,7 +269,20 @@ export function requestToken(): Promise<void> {
     // Verify gapi.client exists before accessing it
     if (typeof gapi === 'undefined' || !gapi.client) {
       console.error('[Google API] gapi.client not available');
+      console.log('[Google API] typeof gapi:', typeof gapi);
+      console.log('[Google API] typeof gapi.client:', typeof gapi?.client);
       reject(new Error('Google API client not ready. Please refresh the page and try again.'));
+      return;
+    }
+    
+    // Add a small delay to ensure gapi.client is fully ready
+    console.log('[Google API] Adding 200ms delay to ensure gapi.client is ready...');
+    await new Promise(r => setTimeout(r, 200));
+    
+    // Double-check gapi.client is still available after delay
+    if (typeof gapi === 'undefined' || !gapi.client) {
+      console.error('[Google API] gapi.client became unavailable after delay');
+      reject(new Error('Google API client became unavailable. Please refresh the page and try again.'));
       return;
     }
 
