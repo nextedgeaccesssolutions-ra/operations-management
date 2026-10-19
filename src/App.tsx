@@ -790,7 +790,7 @@ function Sidebar({ activeView, onViewChange, notificationCount }: {
 
 function LiveOpsCenter() {
   const [googleConnected, setGoogleConnected] = useState(false);
-  const [activeTab, setActiveTab] = useState<'emails' | 'sheets' | 'platform' | 'autoreply'>('emails');
+  const [activeTab, setActiveTab] = useState<'emails' | 'sheets' | 'platform' | 'autoreply' | 'setup'>('setup');
   const [emails, setEmails] = useState(initialEmails);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -798,6 +798,7 @@ function LiveOpsCenter() {
   const [userEmail, setUserEmail] = useState<string>('');
   const [composing, setComposing] = useState(false);
   const [composeData, setComposeData] = useState({ to: '', subject: '', body: '', threadId: '' });
+  const [setupStep, setSetupStep] = useState(1);
 
   const monitoredAccounts = [
     'info.nextedgeaccesssolutions@gmail.com',
@@ -830,6 +831,15 @@ function LiveOpsCenter() {
     try {
       setLoading(true);
       setError(null);
+      
+      // Check if client ID is configured
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+      if (!clientId || clientId === 'YOUR_CLIENT_ID_HERE') {
+        setError('OAuth Client ID not configured. Please complete the Setup wizard first.');
+        setActiveTab('setup');
+        setLoading(false);
+        return;
+      }
       
       await requestToken();
       setGoogleConnected(true);
@@ -949,6 +959,206 @@ function LiveOpsCenter() {
     },
   ];
 
+  // Setup Wizard Component
+  const SetupWizard = () => (
+    <div className="space-y-6">
+      <div className="glass-card rounded-2xl p-8 border-blue-500/20!">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-3xl shadow-lg shadow-blue-500/30">
+            🔧
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-1">Setup Google API Connection</h2>
+            <p className="text-sm text-slate-400">Connect your Gmail accounts in 5 minutes</p>
+          </div>
+        </div>
+
+        {/* Progress Steps */}
+        <div className="flex items-center justify-between mb-8">
+          {[1, 2, 3, 4].map((step) => (
+            <div key={step} className="flex items-center">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
+                setupStep >= step 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-slate-700 text-slate-500'
+              }`}>
+                {setupStep > step ? '✓' : step}
+              </div>
+              {step < 4 && (
+                <div className={`w-16 h-1 ${setupStep > step ? 'bg-blue-500' : 'bg-slate-700'}`} />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Step 1: Create Google Cloud Project */}
+        {setupStep === 1 && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-white">Step 1: Create Google Cloud Project</h3>
+            <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/20 space-y-3">
+              <p className="text-sm text-slate-300">1. Go to Google Cloud Console:</p>
+              <a 
+                href="https://console.cloud.google.com/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 border border-blue-500/30 text-sm text-blue-300 hover:bg-blue-500/30 transition-colors"
+              >
+                Open Google Cloud Console ↗
+              </a>
+              <p className="text-sm text-slate-300 mt-4">2. Click "Select a project" → "New Project"</p>
+              <p className="text-sm text-slate-300">3. Name it: <code className="px-2 py-0.5 rounded bg-slate-700 text-blue-300">NEAS Operations</code></p>
+              <p className="text-sm text-slate-300">4. Click "Create"</p>
+            </div>
+            <button
+              onClick={() => setSetupStep(2)}
+              className="w-full px-4 py-3 rounded-lg bg-blue-500/20 border border-blue-500/30 text-sm text-blue-300 font-medium hover:bg-blue-500/30 transition-colors"
+            >
+              Next: Enable APIs →
+            </button>
+          </div>
+        )}
+
+        {/* Step 2: Enable APIs */}
+        {setupStep === 2 && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-white">Step 2: Enable Gmail & Sheets APIs</h3>
+            <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/20 space-y-3">
+              <p className="text-sm text-slate-300">1. In your project, go to "APIs & Services" → "Library"</p>
+              <p className="text-sm text-slate-300">2. Search for and enable:</p>
+              <div className="space-y-2 ml-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-green-400">✓</span>
+                  <span className="text-sm text-slate-300">Gmail API</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-400">✓</span>
+                  <span className="text-sm text-slate-300">Google Sheets API</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSetupStep(1)}
+                className="px-4 py-3 rounded-lg bg-slate-700/30 border border-slate-600/30 text-sm text-slate-400 font-medium hover:bg-slate-700/50 transition-colors"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={() => setSetupStep(3)}
+                className="flex-1 px-4 py-3 rounded-lg bg-blue-500/20 border border-blue-500/30 text-sm text-blue-300 font-medium hover:bg-blue-500/30 transition-colors"
+              >
+                Next: Configure OAuth →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Configure OAuth */}
+        {setupStep === 3 && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-white">Step 3: Configure OAuth Consent Screen</h3>
+            <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/20 space-y-3">
+              <p className="text-sm text-slate-300">1. Go to "APIs & Services" → "OAuth consent screen"</p>
+              <p className="text-sm text-slate-300">2. User type: <code className="px-2 py-0.5 rounded bg-slate-700 text-blue-300">External</code></p>
+              <p className="text-sm text-slate-300">3. Fill in:</p>
+              <div className="space-y-2 ml-4 text-sm text-slate-400">
+                <p>• App name: <code className="text-blue-300">NEAS Operations Center</code></p>
+                <p>• User support email: <code className="text-blue-300">info.nextedgeaccesssolutions@gmail.com</code></p>
+                <p>• Developer contact: Your email</p>
+              </div>
+              <p className="text-sm text-slate-300">4. Click "Save and Continue" through scopes</p>
+              <p className="text-sm text-slate-300">5. Add test users:</p>
+              <div className="space-y-1 ml-4 text-sm text-slate-400">
+                <p>• <code className="text-blue-300">info.nextedgeaccesssolutions@gmail.com</code></p>
+                <p>• <code className="text-blue-300">nextedgeaccesssolutions@gmail.com</code></p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSetupStep(2)}
+                className="px-4 py-3 rounded-lg bg-slate-700/30 border border-slate-600/30 text-sm text-slate-400 font-medium hover:bg-slate-700/50 transition-colors"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={() => setSetupStep(4)}
+                className="flex-1 px-4 py-3 rounded-lg bg-blue-500/20 border border-blue-500/30 text-sm text-blue-300 font-medium hover:bg-blue-500/30 transition-colors"
+              >
+                Next: Create OAuth Client ID →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Create OAuth Client ID */}
+        {setupStep === 4 && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-white">Step 4: Create OAuth Client ID</h3>
+            <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/20 space-y-3">
+              <p className="text-sm text-slate-300">1. Go to "APIs & Services" → "Credentials"</p>
+              <p className="text-sm text-slate-300">2. Click "+ CREATE CREDENTIALS" → "OAuth client ID"</p>
+              <p className="text-sm text-slate-300">3. Application type: <code className="px-2 py-0.5 rounded bg-slate-700 text-blue-300">Web application</code></p>
+              <p className="text-sm text-slate-300">4. Name: <code className="px-2 py-0.5 rounded bg-slate-700 text-blue-300">NEAS Live Ops</code></p>
+              <p className="text-sm text-slate-300">5. Authorized JavaScript origins:</p>
+              <div className="space-y-1 ml-4 text-sm">
+                <code className="block px-2 py-1 rounded bg-slate-700 text-blue-300">https://operations-management-neas.netlify.app</code>
+                <code className="block px-2 py-1 rounded bg-slate-700 text-blue-300">http://localhost:5173</code>
+              </div>
+              <p className="text-sm text-slate-300 mt-4">6. Click "Create" and <span className="text-amber-400 font-semibold">copy the Client ID</span></p>
+            </div>
+            <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+              <p className="text-xs text-amber-300 font-medium mb-2">⚠️ Important: Copy Your Client ID</p>
+              <p className="text-[11px] text-slate-400">
+                Your Client ID looks like: <code className="text-blue-300">123456789-abc123.apps.googleusercontent.com</code>
+              </p>
+              <p className="text-[11px] text-slate-400 mt-2">
+                You'll need to add this to your environment variables and redeploy the app.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSetupStep(3)}
+                className="px-4 py-3 rounded-lg bg-slate-700/30 border border-slate-600/30 text-sm text-slate-400 font-medium hover:bg-slate-700/50 transition-colors"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('emails');
+                  handleConnectGoogle();
+                }}
+                className="flex-1 px-4 py-3 rounded-lg bg-green-500/20 border border-green-500/30 text-sm text-green-300 font-medium hover:bg-green-500/30 transition-colors"
+              >
+                ✓ Done - Connect Gmail Now
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Quick Help */}
+      <div className="glass-card rounded-2xl p-5">
+        <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+          <span>💡</span> Need Help?
+        </h3>
+        <div className="space-y-2 text-xs text-slate-400">
+          <p>• This setup takes about 5 minutes</p>
+          <p>• You only need to do this once</p>
+          <p>• After setup, you'll see real emails from your Gmail accounts</p>
+          <p>• You can reply to emails directly from this app as CEO</p>
+        </div>
+        <a 
+          href="https://developers.google.com/identity/oauth2/web/guides/get-google-api-clientid" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="mt-3 inline-flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300"
+        >
+          View Google's Official Guide ↗
+        </a>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Hero Header */}
@@ -964,29 +1174,42 @@ function LiveOpsCenter() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className={`px-4 py-2 rounded-xl border ${googleConnected ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+            <div className={`px-4 py-2 rounded-xl border ${googleConnected ? 'bg-green-500/10 border-green-500/30' : 'bg-amber-500/10 border-amber-500/30'}`}>
               <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${googleConnected ? 'bg-green-500 status-pulse' : 'bg-red-500'}`} />
-                <span className={`text-xs font-semibold ${googleConnected ? 'text-green-400' : 'text-red-400'}`}>
-                  {googleConnected ? `Connected: ${userEmail}` : 'Not Connected'}
+                <span className={`w-2.5 h-2.5 rounded-full ${googleConnected ? 'bg-green-500 status-pulse' : 'bg-amber-500 status-pulse'}`} />
+                <span className={`text-xs font-semibold ${googleConnected ? 'text-green-400' : 'text-amber-400'}`}>
+                  {googleConnected ? `✓ ${userEmail}` : 'Setup Required'}
                 </span>
               </div>
             </div>
-            <button
-              onClick={googleConnected ? handleDisconnect : handleConnectGoogle}
-              disabled={loading}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
-                googleConnected
-                  ? 'bg-slate-800/60 border-slate-700/50 text-slate-300 hover:border-slate-600/50'
-                  : 'bg-blue-500/20 border-blue-500/30 text-blue-300 hover:bg-blue-500/30'
-              } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {loading ? 'Connecting...' : googleConnected ? 'Disconnect' : 'Connect Google'}
-            </button>
+            {!googleConnected && (
+              <button
+                onClick={() => setActiveTab('setup')}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:bg-blue-500/30 transition-all"
+              >
+                🔧 Setup Wizard
+              </button>
+            )}
+            {googleConnected && (
+              <button
+                onClick={handleDisconnect}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800/60 border border-slate-700/50 text-slate-300 hover:border-slate-600/50 transition-all"
+              >
+                Disconnect
+              </button>
+            )}
           </div>
           {error && (
             <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-300">
               ⚠️ {error}
+            </div>
+          )}
+          {!googleConnected && !error && (
+            <div className="mt-3 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">
+              <p className="text-xs text-blue-300 font-medium mb-1">👋 Welcome! Let's connect your Gmail accounts</p>
+              <p className="text-[11px] text-slate-400">
+                Click "Setup Wizard" to connect <span className="text-blue-300 font-mono">info.nextedgeaccesssolutions@gmail.com</span> and <span className="text-blue-300 font-mono">nextedgeaccesssolutions@gmail.com</span> in 5 minutes.
+              </p>
             </div>
           )}
         </div>
@@ -1008,6 +1231,7 @@ function LiveOpsCenter() {
       {/* Tabs */}
       <div className="flex items-center gap-1 bg-slate-800/50 rounded-xl p-1.5 border border-slate-700/50 w-fit">
         {([
+          { id: 'setup' as const, label: 'Setup', icon: '🔧' },
           { id: 'emails' as const, label: 'Email Monitor', icon: '📧', count: emails.filter(e => e.status === 'unread').length },
           { id: 'sheets' as const, label: 'Google Sheets', icon: '📊' },
           { id: 'platform' as const, label: 'Platform Monitor', icon: '🌐' },
@@ -1032,6 +1256,9 @@ function LiveOpsCenter() {
           </button>
         ))}
       </div>
+
+      {/* Setup Tab */}
+      {activeTab === 'setup' && <SetupWizard />}
 
       {/* Tab Content */}
       {activeTab === 'emails' && (
