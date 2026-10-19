@@ -34,6 +34,7 @@ import {
   getUserEmail,
   isGoogleApiLoaded,
   isClientIdConfigured,
+  isGapiReady,
 } from './services/googleApi';
 
 // ============ Status Components ============
@@ -819,16 +820,20 @@ function LiveOpsCenter() {
           setTimeout(async () => {
             if (isGoogleApiLoaded()) {
               setGoogleApiReady(true);
-              await initializeGapi();
-              if (isClientIdConfigured()) {
-                await initializeGis();
-                if (isAuthenticated()) {
-                  setGoogleConnected(true);
-                  const email = await getUserEmail();
-                  setUserEmail(email);
-                  await loadRealEmails();
-                  setActiveTab('emails');
+              try {
+                await initializeGapi();
+                if (isClientIdConfigured()) {
+                  await initializeGis();
+                  if (isAuthenticated()) {
+                    setGoogleConnected(true);
+                    const email = await getUserEmail();
+                    setUserEmail(email);
+                    await loadRealEmails();
+                    setActiveTab('emails');
+                  }
                 }
+              } catch (initError) {
+                console.error('Failed to initialize Google API:', initError);
               }
             }
           }, 1000);
@@ -836,7 +841,15 @@ function LiveOpsCenter() {
         }
 
         setGoogleApiReady(true);
+        
+        // Initialize gapi client
         await initializeGapi();
+        
+        // Check if gapi is ready after initialization
+        if (!isGapiReady()) {
+          console.error('Google API client not ready after initialization');
+          return;
+        }
         
         if (isClientIdConfigured()) {
           await initializeGis();
@@ -866,6 +879,13 @@ function LiveOpsCenter() {
       // Check if Google API scripts are loaded
       if (!isGoogleApiLoaded()) {
         setError('Google API scripts are still loading. Please wait a moment and try again.');
+        setLoading(false);
+        return;
+      }
+      
+      // Check if gapi client is ready
+      if (!isGapiReady()) {
+        setError('Google API client is not ready. Please refresh the page and try again.');
         setLoading(false);
         return;
       }

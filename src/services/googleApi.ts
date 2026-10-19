@@ -51,13 +51,16 @@ export interface Email {
  */
 export async function initializeGapi(): Promise<void> {
   return new Promise((resolve, reject) => {
+    // Check if gapi is loaded
     if (typeof gapi === 'undefined') {
-      reject(new Error('Google API not loaded'));
+      reject(new Error('Google API library not loaded. Please refresh the page.'));
       return;
     }
 
+    // Load gapi client
     gapi.load(async () => {
       try {
+        // Initialize the client with discovery docs
         await gapi.client.init({
           discoveryDocs: [
             'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest',
@@ -66,11 +69,19 @@ export async function initializeGapi(): Promise<void> {
         });
         gapiInited = true;
         resolve();
-      } catch (error) {
-        reject(error);
+      } catch (error: any) {
+        console.error('GAPI init error:', error);
+        reject(new Error(error.message || 'Failed to initialize Google API client'));
       }
     });
   });
+}
+
+/**
+ * Check if gapi client is ready
+ */
+export function isGapiReady(): boolean {
+  return gapiInited && typeof gapi !== 'undefined' && gapi.client !== undefined;
 }
 
 /**
@@ -145,6 +156,12 @@ export function requestToken(): Promise<void> {
       return;
     }
 
+    // Check if gapi.client is available
+    if (typeof gapi === 'undefined' || !gapi.client) {
+      reject(new Error('Google API client not ready. Please refresh the page and try again.'));
+      return;
+    }
+
     // Set up timeout
     const timeoutId = setTimeout(() => {
       reject(new Error('Connection timeout. Please try again.'));
@@ -165,7 +182,8 @@ export function requestToken(): Promise<void> {
 
     try {
       // Request the token - this will trigger the callback
-      if (gapi.client.getToken() === null) {
+      const currentToken = gapi.client.getToken();
+      if (currentToken === null) {
         tokenClient.requestAccessToken({ prompt: 'consent' });
       } else {
         tokenClient.requestAccessToken({ prompt: '' });
@@ -181,13 +199,17 @@ export function requestToken(): Promise<void> {
  * Check if user is authenticated
  */
 export function isAuthenticated(): boolean {
-  return gapiInited && gisInited && gapi.client.getToken() !== null;
+  return gapiInited && gisInited && typeof gapi !== 'undefined' && gapi.client !== undefined && gapi.client.getToken() !== null;
 }
 
 /**
  * Sign out
  */
 export function signOut(): void {
+  if (typeof gapi === 'undefined' || !gapi.client) {
+    return;
+  }
+  
   const token = gapi.client.getToken();
   if (token) {
     google.accounts.oauth2.revoke(token.access_token);
