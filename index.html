@@ -9,15 +9,9 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <!-- Google API scripts will be loaded dynamically when needed -->
-    <script>
-      // Global flag to track Google API loading status
-      window.googleApiLoading = {
-        gapiLoaded: false,
-        gisLoaded: false,
-        onError: null
-      };
-    </script>
+    <!-- Google API Client Library -->
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       /* 内联样式确保主题色立即生效，避免闪烁 */
       html,

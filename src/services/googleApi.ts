@@ -116,10 +116,36 @@ function loadGoogleScripts(): Promise<void> {
 }
 
 /**
- * Wait for Google API scripts to load (now uses dynamic loading)
+ * Wait for Google API scripts to load
  */
-function waitForScripts(maxWait: number = 15000): Promise<void> {
-  return loadGoogleScripts();
+function waitForScripts(maxWait: number = 10000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    
+    const checkScripts = () => {
+      // Check if scripts are available in the global scope (loaded from HTML head)
+      if (typeof gapi !== 'undefined' && typeof google !== 'undefined') {
+        console.log('[Google API] Scripts loaded successfully from HTML head');
+        if (window.googleApiLoading) {
+          window.googleApiLoading.gapiLoaded = true;
+          window.googleApiLoading.gisLoaded = true;
+        }
+        resolve();
+        return;
+      }
+      
+      // Check timeout
+      if (Date.now() - startTime > maxWait) {
+        reject(new Error('Google API scripts failed to load. Please refresh the page.'));
+        return;
+      }
+      
+      // Check again in 100ms
+      setTimeout(checkScripts, 100);
+    };
+    
+    checkScripts();
+  });
 }
 
 /**

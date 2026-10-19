@@ -17,6 +17,7 @@ import {
 import { agenticEngine, simulateTaskProgress, simulateEmailProcessing, generateAIResponse } from './agenticEngine';
 import InterDepartmentFeed from './components/InterDepartmentFeed';
 import OfficeHub from './components/OfficeHub';
+import TitanCommandCenter from './components/TitanCommandCenter';
 import {
   initializeGapi,
   initializeGis,
@@ -568,7 +569,7 @@ function AgenticActivityFeed() {
 
 function OfficeDashboard() {
   const { user, logout } = useAuth();
-  const [activeView, setActiveView] = useState<'floor' | 'emails' | 'activity' | 'interdept' | 'hub'>('floor');
+  const [activeView, setActiveView] = useState<'floor' | 'emails' | 'activity' | 'interdept' | 'hub' | 'titan'>('floor');
   const [presence, setPresence] = useState<PresenceStatus>('available');
   const [agents, setAgents] = useState(departments.flatMap(d => d.agents));
 
@@ -610,6 +611,7 @@ function OfficeDashboard() {
 
         <nav className="flex-1 p-2 space-y-1">
           {[
+            { id: 'titan' as const, icon: '🏛️', label: 'PROJECT TITAN' },
             { id: 'floor' as const, icon: '🏢', label: 'Office Floor' },
             { id: 'hub' as const, icon: '🖥️', label: 'Office Hub' },
             { id: 'emails' as const, icon: '📧', label: 'Email Monitor' },
@@ -644,6 +646,7 @@ function OfficeDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-white">
+                {activeView === 'titan' && '🏛️ PROJECT TITAN - Empire Command Center'}
                 {activeView === 'floor' && '🏢 Office Floor'}
                 {activeView === 'hub' && '🖥️ Office Hub'}
                 {activeView === 'emails' && '📧 Email Monitor'}
@@ -651,6 +654,7 @@ function OfficeDashboard() {
                 {activeView === 'interdept' && '🤝 Inter-Department Collaboration'}
               </h2>
               <p className="text-[10px] text-slate-500 mt-0.5">
+                {activeView === 'titan' && 'Autonomous Agentic AI Empire Operating System'}
                 {activeView === 'floor' && 'Interactive office with autonomous AI agents'}
                 {activeView === 'hub' && 'Office equipment and asset management'}
                 {activeView === 'emails' && 'Real-time email monitoring with AI responses'}
@@ -756,6 +760,7 @@ function OfficeDashboard() {
             </div>
           )}
 
+          {activeView === 'titan' && <TitanCommandCenter />}
           {activeView === 'hub' && <OfficeHub />}
           {activeView === 'emails' && <EmailMonitor />}
           {activeView === 'activity' && <AgenticActivityFeed />}
