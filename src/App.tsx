@@ -11,6 +11,17 @@ import AIExecutiveAssistant from './components/AIExecutiveAssistant';
 import CompanyKnowledgeBase from './components/CompanyKnowledgeBase';
 import WorkflowBuilder from './components/WorkflowBuilder';
 import SalesCRM from './components/SalesCRM';
+import ProjectsModule from './components/ProjectsModule';
+import FinanceModule from './components/FinanceModule';
+import BOQModule from './components/BOQModule';
+import HRModule from './components/HRModule';
+import HSEModule from './components/HSEModule';
+import ProcurementModule from './components/ProcurementModule';
+import MarketingModule from './components/MarketingModule';
+import ReportsModule from './components/ReportsModule';
+import IntegrationsModule from './components/IntegrationsModule';
+import UsersModule from './components/UsersModule';
+import AuditModule from './components/AuditModule';
 
 type ViewType = 
   | 'executive'
@@ -85,6 +96,28 @@ export default function App() {
         return <EmailCenter />;
       case 'approval-inbox':
         return <ApprovalInbox />;
+      case 'projects':
+        return <ProjectsModule />;
+      case 'boq':
+        return <BOQModule />;
+      case 'finance':
+        return <FinanceModule />;
+      case 'hr':
+        return <HRModule />;
+      case 'hse':
+        return <HSEModule />;
+      case 'procurement':
+        return <ProcurementModule />;
+      case 'marketing':
+        return <MarketingModule />;
+      case 'reports':
+        return <ReportsModule />;
+      case 'integrations':
+        return <IntegrationsModule />;
+      case 'users':
+        return <UsersModule />;
+      case 'audit':
+        return <AuditModule />;
       default:
         return (
           <div className="flex items-center justify-center h-full">
@@ -167,10 +200,26 @@ export default function App() {
               </h2>
               <p className="text-xs text-slate-400">
                 {currentView === 'executive' && 'Strategic overview and executive decision support'}
+                {currentView === 'workforce' && 'Real-time AI workforce monitoring and control'}
+                {currentView === 'assistant' && 'Conversational AI command interface'}
+                {currentView === 'knowledge' && 'Company document and knowledge management'}
+                {currentView === 'workflows' && 'Automated business workflow management'}
+                {currentView === 'crm' && 'Sales pipeline and customer relationship management'}
                 {currentView === 'staff-directory' && 'AI workforce management and performance'}
                 {currentView === 'task-monitor' && 'Real-time task tracking and coordination'}
                 {currentView === 'email-center' && 'Company email integration and management'}
                 {currentView === 'approval-inbox' && 'Review and approve critical business actions'}
+                {currentView === 'projects' && 'Project management and progress tracking'}
+                {currentView === 'boq' && 'Bill of quantities and quotation management'}
+                {currentView === 'finance' && 'Financial management and cash flow tracking'}
+                {currentView === 'hr' && 'Human resources and employee management'}
+                {currentView === 'hse' && 'Health, safety, and quality compliance'}
+                {currentView === 'procurement' && 'Procurement and inventory management'}
+                {currentView === 'marketing' && 'Marketing campaigns and analytics'}
+                {currentView === 'reports' && 'Business reports and analytics'}
+                {currentView === 'integrations' && 'System integrations and connections'}
+                {currentView === 'users' && 'User management and access control'}
+                {currentView === 'audit' && 'System audit trail and compliance logs'}
               </p>
             </div>
             <div className="flex items-center gap-3">
