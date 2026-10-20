@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { orchestrationEngine } from '../neas/orchestrationEngine';
 import PersistenceService from '../services/persistenceService';
+import { formatDate, hydrateDatesArray } from '../utils/dateFormatter';
 
 interface Workflow {
   id: string;
@@ -10,10 +11,10 @@ interface Workflow {
   status: 'active' | 'paused' | 'draft';
   steps: WorkflowStep[];
   executionCount: number;
-  lastExecuted?: Date;
+  lastExecuted?: Date | string;
   successRate: number;
   createdBy: string;
-  createdAt: Date;
+  createdAt: Date | string;
 }
 
 interface WorkflowStep {
@@ -308,7 +309,11 @@ const sampleWorkflows: Workflow[] = [
 export default function WorkflowBuilder() {
   const [workflows, setWorkflows] = useState<Workflow[]>(() => {
     const saved = PersistenceService.loadModuleData<Workflow[]>('workflows', []);
-    return saved.length > 0 ? saved : sampleWorkflows;
+    if (saved.length > 0) {
+      // Hydrate dates from localStorage (they come back as ISO strings)
+      return hydrateDatesArray(saved, ['lastExecuted', 'createdAt']);
+    }
+    return sampleWorkflows;
   });
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -592,7 +597,7 @@ export default function WorkflowBuilder() {
                 <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
                   <p className="text-[10px] text-slate-500 mb-1">Last Executed</p>
                   <p className="text-xs text-white">
-                    {selectedWorkflow.lastExecuted ? selectedWorkflow.lastExecuted.toLocaleDateString() : 'Never'}
+                    {formatDate(selectedWorkflow.lastExecuted, 'Never')}
                   </p>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import GmailService, { GmailAccount, GmailConnectionHealth, GmailSyncState } from '../services/gmailService';
 import { orchestrationEngine } from '../neas/orchestrationEngine';
+import { formatTime, formatDateTime } from '../utils/dateFormatter';
 
 export default function GmailMigration() {
   const [account, setAccount] = useState<GmailAccount | null>(null);
@@ -261,7 +262,7 @@ export default function GmailMigration() {
           <div className="p-4 rounded-lg bg-slate-800/30 border border-slate-700/30">
             <p className="text-[10px] text-slate-500 mb-1">Last Sync</p>
             <p className="text-sm text-white">
-              {account.lastSyncAt ? account.lastSyncAt.toLocaleString() : 'Never'}
+              {account.lastSyncAt ? formatDateTime(account.lastSyncAt) : 'Never'}
             </p>
           </div>
         </div>

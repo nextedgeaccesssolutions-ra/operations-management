@@ -6,6 +6,7 @@ import RefrensService, {
   RefrensConnectionHealth,
   RefrensSyncState 
 } from '../services/refrensService';
+import { formatDate, formatTime, formatDateTime } from '../utils/dateFormatter';
 
 export default function RefrensIntegration() {
   const [connectionHealth, setConnectionHealth] = useState<RefrensConnectionHealth | null>(null);
@@ -214,7 +215,7 @@ export default function RefrensIntegration() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
               <p className="text-[10px] text-slate-500 mb-1">Last Health Check</p>
-              <p className="text-xs text-white">{connectionHealth.lastCheck.toLocaleString()}</p>
+              <p className="text-xs text-white">{formatDateTime(connectionHealth.lastCheck)}</p>
             </div>
             {connectionHealth.responseTime && (
               <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
@@ -250,7 +251,7 @@ export default function RefrensIntegration() {
               <p className="text-[10px] text-slate-500 mb-1">Last Sync</p>
               <p className="text-xs text-white">
                 {syncState.lastSuccessfulSyncAt 
-                  ? syncState.lastSuccessfulSyncAt.toLocaleString()
+                  ? formatDateTime(syncState.lastSuccessfulSyncAt)
                   : 'Never'}
               </p>
             </div>
@@ -435,7 +436,7 @@ export default function RefrensIntegration() {
                   <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-2">
                     <span>Currency: {client.currency}</span>
                     <span>•</span>
-                    <span>Synced: {client.lastSyncedAt.toLocaleDateString()}</span>
+                    <span>Synced: {formatDate(client.lastSyncedAt)}</span>
                   </div>
                 </div>
               ))}
@@ -504,11 +505,11 @@ export default function RefrensIntegration() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-2">
-                    <span>Issued: {new Date(quotation.issueDate).toLocaleDateString()}</span>
+                    <span>Issued: {formatDate(quotation.issueDate)}</span>
                     {quotation.validUntil && (
                       <>
                         <span>•</span>
-                        <span>Valid until: {new Date(quotation.validUntil).toLocaleDateString()}</span>
+                        <span>Valid until: {formatDate(quotation.validUntil)}</span>
                       </>
                     )}
                     <span>•</span>
@@ -601,15 +602,15 @@ export default function RefrensIntegration() {
                     </div>
                     <div>
                       <p className="text-[10px] text-slate-500">Due Date</p>
-                      <p className="text-xs text-white">{new Date(invoice.dueDate).toLocaleDateString()}</p>
+                      <p className="text-xs text-white">{formatDate(invoice.dueDate)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-2">
-                    <span>Issued: {new Date(invoice.issueDate).toLocaleDateString()}</span>
+                    <span>Issued: {formatDate(invoice.issueDate)}</span>
                     {invoice.paidDate && (
                       <>
                         <span>•</span>
-                        <span>Paid: {new Date(invoice.paidDate).toLocaleDateString()}</span>
+                        <span>Paid: {formatDate(invoice.paidDate)}</span>
                       </>
                     )}
                     <span>•</span>

@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { agents, getAgentById } from '../neas/agentRegistry';
 import { orchestrationEngine } from '../neas/orchestrationEngine';
+import { formatTime, formatDateTime } from '../utils/dateFormatter';
 
 interface AgentStatus {
   agentId: string;
   status: 'idle' | 'processing' | 'awaiting_approval' | 'blocked' | 'offline';
   currentTask?: string;
-  lastHeartbeat: Date;
-  lastSuccessfulJob?: Date;
+  lastHeartbeat: Date | string;
+  lastSuccessfulJob?: Date | string;
   connectionHealth: 'healthy' | 'degraded' | 'offline';
   apiCalls: number;
   estimatedCost: number;
@@ -269,7 +270,7 @@ export default function LiveWorkforceControlCenter() {
               {/* Heartbeat */}
               {status && (
                 <div className="text-[10px] text-slate-500">
-                  Last heartbeat: {status.lastHeartbeat.toLocaleTimeString()}
+                  Last heartbeat: {formatTime(status.lastHeartbeat)}
                 </div>
               )}
             </div>
@@ -335,12 +336,12 @@ export default function LiveWorkforceControlCenter() {
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div className="p-4 rounded-lg bg-slate-800/30 border border-slate-700/30">
                   <p className="text-xs text-slate-400 mb-1">Last Heartbeat</p>
-                  <p className="text-sm text-white">{status.lastHeartbeat.toLocaleString()}</p>
+                  <p className="text-sm text-white">{formatDateTime(status.lastHeartbeat)}</p>
                 </div>
                 {status.lastSuccessfulJob && (
                   <div className="p-4 rounded-lg bg-slate-800/30 border border-slate-700/30">
                     <p className="text-xs text-slate-400 mb-1">Last Successful Job</p>
-                    <p className="text-sm text-white">{status.lastSuccessfulJob.toLocaleString()}</p>
+                    <p className="text-sm text-white">{formatDateTime(status.lastSuccessfulJob)}</p>
                   </div>
                 )}
               </div>

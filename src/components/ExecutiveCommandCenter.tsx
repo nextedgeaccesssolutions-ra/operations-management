@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { orchestrationEngine } from '../neas/orchestrationEngine';
 import { agents, getDepartmentStats, getAgentById } from '../neas/agentRegistry';
 import RefrensService from '../services/refrensService';
+import { formatTime, formatDateTime, formatDate } from '../utils/dateFormatter';
 
 interface MetricData {
   value: number | string;
@@ -136,7 +137,7 @@ export default function ExecutiveCommandCenter() {
 
       {/* Last Refresh Indicator */}
       <div className="text-[10px] text-slate-500 text-right">
-        Last updated: {lastRefresh.toLocaleTimeString()}
+        Last updated: {formatTime(lastRefresh)}
       </div>
 
       {/* Filters */}
@@ -199,7 +200,7 @@ export default function ExecutiveCommandCenter() {
           </div>
           <p className="text-3xl font-bold text-white">{totalAgents}</p>
           <p className="text-xs text-slate-400 mt-1">AI Staff Members</p>
-          <p className="text-[9px] text-slate-500 mt-2">Source: Internal • Updated: {lastRefresh.toLocaleTimeString()}</p>
+          <p className="text-[9px] text-slate-500 mt-2">Source: Internal • Updated: {formatTime(lastRefresh)}</p>
         </div>
 
         <div className="glass-card rounded-xl p-5 border-l-4 border-l-blue-500">
@@ -211,7 +212,7 @@ export default function ExecutiveCommandCenter() {
           </div>
           <p className="text-3xl font-bold text-white">{totalTasks}</p>
           <p className="text-xs text-slate-400 mt-1">Total Tasks</p>
-          <p className="text-[9px] text-slate-500 mt-2">Source: Internal • Updated: {lastRefresh.toLocaleTimeString()}</p>
+          <p className="text-[9px] text-slate-500 mt-2">Source: Internal • Updated: {formatTime(lastRefresh)}</p>
         </div>
 
         <div className="glass-card rounded-xl p-5 border-l-4 border-l-red-500">
@@ -221,7 +222,7 @@ export default function ExecutiveCommandCenter() {
           </div>
           <p className="text-3xl font-bold text-white">{criticalTasks}</p>
           <p className="text-xs text-slate-400 mt-1">Critical Priority</p>
-          <p className="text-[9px] text-slate-500 mt-2">Source: Internal • Updated: {lastRefresh.toLocaleTimeString()}</p>
+          <p className="text-[9px] text-slate-500 mt-2">Source: Internal • Updated: {formatTime(lastRefresh)}</p>
         </div>
 
         <div className="glass-card rounded-xl p-5 border-l-4 border-l-amber-500">
@@ -231,7 +232,7 @@ export default function ExecutiveCommandCenter() {
           </div>
           <p className="text-3xl font-bold text-white">{pendingApprovals.length}</p>
           <p className="text-xs text-slate-400 mt-1">Awaiting Approval</p>
-          <p className="text-[9px] text-slate-500 mt-2">Source: Internal • Updated: {lastRefresh.toLocaleTimeString()}</p>
+          <p className="text-[9px] text-slate-500 mt-2">Source: Internal • Updated: {formatTime(lastRefresh)}</p>
         </div>
 
         <div className="glass-card rounded-xl p-5 border-l-4 border-l-green-500">
@@ -243,7 +244,7 @@ export default function ExecutiveCommandCenter() {
           </div>
           <p className="text-3xl font-bold text-white">{taskStats.byStatus.completed}</p>
           <p className="text-xs text-slate-400 mt-1">Completed Tasks</p>
-          <p className="text-[9px] text-slate-500 mt-2">Source: Internal • Updated: {lastRefresh.toLocaleTimeString()}</p>
+          <p className="text-[9px] text-slate-500 mt-2">Source: Internal • Updated: {formatTime(lastRefresh)}</p>
         </div>
       </div>
 
@@ -260,7 +261,7 @@ export default function ExecutiveCommandCenter() {
             <p className="text-3xl font-bold text-white">{refrensQuotationCount}</p>
             <p className="text-xs text-slate-400 mt-1">Quotations</p>
             <p className="text-[9px] text-slate-500 mt-2">
-              Source: Refrens • Updated: {refrensSyncState.lastSuccessfulSyncAt?.toLocaleTimeString() || 'Never'}
+              Source: Refrens • Updated: {formatTime(refrensSyncState.lastSuccessfulSyncAt) || 'Never'}
             </p>
           </div>
 
@@ -288,7 +289,7 @@ export default function ExecutiveCommandCenter() {
             <p className="text-3xl font-bold text-white">{refrensInvoiceCount}</p>
             <p className="text-xs text-slate-400 mt-1">Invoices</p>
             <p className="text-[9px] text-slate-500 mt-2">
-              Source: Refrens • Updated: {refrensSyncState.lastSuccessfulSyncAt?.toLocaleTimeString() || 'Never'}
+              Source: Refrens • Updated: {formatTime(refrensSyncState.lastSuccessfulSyncAt) || 'Never'}
             </p>
           </div>
 
@@ -351,7 +352,7 @@ export default function ExecutiveCommandCenter() {
                       <div className="flex items-center gap-3 text-[10px] text-slate-500">
                         <span>Requested by: <span className="text-white">{approval.requestedByAgent}</span></span>
                         <span>•</span>
-                        <span>{new Date(approval.requestedAt).toLocaleDateString()}</span>
+                        <span>{formatDate(approval.requestedAt)}</span>
                         <span>•</span>
                         <span className={`px-2 py-0.5 rounded font-bold ${
                           approval.approvalLevel === 3 ? 'bg-red-500/20 text-red-400' :
@@ -482,7 +483,7 @@ export default function ExecutiveCommandCenter() {
                 <p className="text-xs text-slate-400 truncate">{log.details}</p>
               </div>
               <span className="text-[10px] text-slate-500 flex-shrink-0">
-                {new Date(log.timestamp).toLocaleTimeString()}
+                {formatTime(log.timestamp)}
               </span>
             </div>
           ))}
