@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import PersistenceService from '../services/persistenceService';
+import { orchestrationEngine } from '../neas/orchestrationEngine';
 
 interface Lead {
   id: string;
@@ -138,14 +140,28 @@ const sampleLeads: Lead[] = [
 ];
 
 export default function SalesCRM() {
-  const [leads, setLeads] = useState<Lead[]>(sampleLeads);
+  const [leads, setLeads] = useState<Lead[]>(() => {
+    const saved = PersistenceService.loadModuleData<Lead[]>('salesLeads', []);
+    return saved.length > 0 ? saved : sampleLeads;
+  });
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('pipeline');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  // Save leads to localStorage when they change
+  useEffect(() => {
+    PersistenceService.saveModuleData('salesLeads', leads);
+  }, [leads]);
 
   const filteredLeads = leads.filter(lead => {
-    if (filterStatus === 'all') return true;
-    return lead.status === filterStatus;
+    const matchesStatus = filterStatus === 'all' || lead.status === filterStatus;
+    const matchesSearch = searchQuery === '' || 
+      lead.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      lead.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      lead.email.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesStatus && matchesSearch;
   });
 
   const pipelineStages = [
@@ -185,8 +201,89 @@ export default function SalesCRM() {
     }
   };
 
+  const handleEditLead = () => {
+    if (!selectedLead) return;
+    setError('Edit functionality coming soon');
+  };
+
+  const handleCreateTask = () => {
+    if (!selectedLead) return;
+    try {
+      orchestrationEngine.createTask({
+        title: `Follow up with ${selectedLead.companyName}`,
+        description: `Follow up on ${selectedLead.service} opportunity worth ${formatCurrency(selectedLead.value)}`,
+        assignedAgentId: 'sales-agent',
+        createdBy: 'CEO',
+        department: 'sales',
+        priority: 'high',
+        status: 'queued',
+        approvalLevel: 1,
+        progress: 0,
+        dueDate: selectedLead.expectedCloseDate,
+        tags: ['sales', 'follow-up', selectedLead.companyName.toLowerCase().replace(/\s+/g, '-')]
+      });
+      setError(null);
+      alert(`Task created for ${selectedLead.companyName}`);
+    } catch (err) {
+      setError('Failed to create task. Please try again.');
+      console.error('[SalesCRM] Create task failed:', err);
+    }
+  };
+
+  const handleSendEmail = () => {
+    if (!selectedLead) return;
+    setError('Email functionality requires Gmail integration');
+  };
+
+  const handleAddNote = () => {
+    if (!selectedLead) return;
+    const note = prompt('Enter note:');
+    if (note && note.trim()) {
+      setLeads(prev => prev.map(l => 
+        l.id === selectedLead.id 
+          ? { ...l, notes: [...l.notes, note.trim()], lastContact: new Date() }
+          : l
+      ));
+      setSelectedLead(prev => prev ? { ...prev, notes: [...prev.notes, note.trim()], lastContact: new Date() } : null);
+      setError(null);
+    }
+  };
+
+  const handleUpdateStatus = (newStatus: Lead['status']) => {
+    if (!selectedLead) return;
+    setLeads(prev => prev.map(l => 
+      l.id === selectedLead.id ? { ...l, status: newStatus } : l
+    ));
+    setSelectedLead(prev => prev ? { ...prev, status: newStatus } : null);
+    orchestrationEngine.addAuditLog(
+      'user',
+      'CEO',
+      'lead_status_changed',
+      'lead',
+      selectedLead.id,
+      `Lead ${selectedLead.companyName} status changed to ${newStatus}`,
+      'info'
+    );
+  };
+
   return (
     <div className="space-y-6">
+      {/* Error Display */}
+      {error && (
+        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <div className="flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-300"
+              aria-label="Dismiss error"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="glass-card rounded-xl p-5">
@@ -209,9 +306,9 @@ export default function SalesCRM() {
         </div>
       </div>
 
-      {/* View Toggle and Filters */}
+      {/* View Toggle, Search, and Filters */}
       <div className="glass-card rounded-xl p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setViewMode('pipeline')}
@@ -220,6 +317,8 @@ export default function SalesCRM() {
                   ? 'bg-[#CA9332]/20 text-[#EBC07E] border border-[#CA9332]/30'
                   : 'text-slate-400 hover:text-slate-300'
               }`}
+              aria-label="Switch to pipeline view"
+              aria-pressed={viewMode === 'pipeline'}
             >
               Pipeline View
             </button>
@@ -230,16 +329,28 @@ export default function SalesCRM() {
                   ? 'bg-[#CA9332]/20 text-[#EBC07E] border border-[#CA9332]/30'
                   : 'text-slate-400 hover:text-slate-300'
               }`}
+              aria-label="Switch to list view"
+              aria-pressed={viewMode === 'list'}
             >
               List View
             </button>
           </div>
-          <div className="flex items-center gap-3">
-            <label className="text-xs text-slate-400">Filter:</label>
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search leads..."
+              className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#CA9332]/50"
+              aria-label="Search leads by company, contact, or email"
+            />
+            <label className="text-xs text-slate-400" htmlFor="status-filter">Filter:</label>
             <select
+              id="status-filter"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white focus:outline-none focus:border-[#CA9332]/50"
+              aria-label="Filter leads by status"
             >
               <option value="all">All Stages</option>
               {pipelineStages.map(stage => (
@@ -268,20 +379,33 @@ export default function SalesCRM() {
                 </div>
                 <p className="text-xs text-[#EBC07E] font-semibold mb-3">{formatCurrency(stageValue)}</p>
                 <div className="space-y-2">
-                  {stageLeads.map(lead => (
-                    <div
-                      key={lead.id}
-                      onClick={() => setSelectedLead(lead)}
-                      className="p-2 rounded-lg bg-slate-800/30 border border-slate-700/30 cursor-pointer hover:border-[#CA9332]/30 transition-all"
-                    >
-                      <p className="text-[10px] font-semibold text-white truncate">{lead.companyName}</p>
-                      <p className="text-[9px] text-slate-400 truncate">{lead.service}</p>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-[9px] text-[#EBC07E]">{formatCurrency(lead.value)}</span>
-                        <span className="text-[9px] text-slate-500">{lead.probability}%</span>
+                  {stageLeads.length === 0 ? (
+                    <p className="text-[10px] text-slate-500 text-center py-2">No leads</p>
+                  ) : (
+                    stageLeads.map(lead => (
+                      <div
+                        key={lead.id}
+                        onClick={() => setSelectedLead(lead)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedLead(lead);
+                          }
+                        }}
+                        className="p-2 rounded-lg bg-slate-800/30 border border-slate-700/30 cursor-pointer hover:border-[#CA9332]/30 transition-all"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`View lead: ${lead.companyName}, ${formatCurrency(lead.value)}, ${lead.probability}% probability`}
+                      >
+                        <p className="text-[10px] font-semibold text-white truncate">{lead.companyName}</p>
+                        <p className="text-[9px] text-slate-400 truncate">{lead.service}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-[9px] text-[#EBC07E]">{formatCurrency(lead.value)}</span>
+                          <span className="text-[9px] text-slate-500">{lead.probability}%</span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             );
@@ -292,12 +416,28 @@ export default function SalesCRM() {
       {/* List View */}
       {viewMode === 'list' && (
         <div className="glass-card rounded-xl p-6">
+          {filteredLeads.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-4xl mb-3">📊</div>
+              <p className="text-sm text-slate-400">No leads found</p>
+              <p className="text-xs text-slate-500 mt-1">Try changing the filter or search query</p>
+            </div>
+          ) : (
           <div className="space-y-3">
             {filteredLeads.map(lead => (
               <div
                 key={lead.id}
                 onClick={() => setSelectedLead(lead)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedLead(lead);
+                  }
+                }}
                 className="p-4 rounded-lg bg-slate-800/30 border border-slate-700/30 cursor-pointer hover:border-[#CA9332]/30 transition-all"
+                role="button"
+                tabIndex={0}
+                aria-label={`View lead: ${lead.companyName}, ${lead.contactName}, ${formatCurrency(lead.value)}`}
               >
                 <div className="flex items-start justify-between mb-2">
                   <div>
@@ -329,6 +469,7 @@ export default function SalesCRM() {
               </div>
             ))}
           </div>
+          )}
         </div>
       )}
 
@@ -436,22 +577,60 @@ export default function SalesCRM() {
               </div>
             </div>
 
+            {/* Status Update */}
+            <div className="mt-6 pt-6 border-t border-slate-700/30">
+              <h3 className="text-sm font-bold text-white mb-3">Update Status</h3>
+              <div className="flex flex-wrap gap-2">
+                {pipelineStages.map(stage => (
+                  <button
+                    key={stage.id}
+                    onClick={() => handleUpdateStatus(stage.id as Lead['status'])}
+                    disabled={selectedLead.status === stage.id}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${getStatusColor(stage.id)} ${
+                      selectedLead.status === stage.id ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'
+                    }`}
+                    aria-label={`Change status to ${stage.label}`}
+                    aria-pressed={selectedLead.status === stage.id}
+                  >
+                    {stage.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center gap-3 mt-6 pt-6 border-t border-slate-700/30">
-              <button className="px-4 py-2 rounded-lg bg-[#CA9332]/20 text-[#EBC07E] text-xs font-medium hover:bg-[#CA9332]/30 transition-all">
+              <button 
+                onClick={handleEditLead}
+                className="px-4 py-2 rounded-lg bg-[#CA9332]/20 text-[#EBC07E] text-xs font-medium hover:bg-[#CA9332]/30 transition-all"
+                aria-label="Edit lead"
+              >
                 Edit Lead
               </button>
-              <button className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 text-xs font-medium hover:bg-green-500/30 transition-all">
+              <button 
+                onClick={handleCreateTask}
+                className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 text-xs font-medium hover:bg-green-500/30 transition-all"
+                aria-label="Create follow-up task"
+              >
                 Create Task
               </button>
-              <button className="px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 text-xs font-medium hover:bg-blue-500/30 transition-all">
+              <button 
+                onClick={handleSendEmail}
+                className="px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 text-xs font-medium hover:bg-blue-500/30 transition-all"
+                aria-label="Send email to lead"
+              >
                 Send Email
               </button>
-              <button className="px-4 py-2 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all">
+              <button 
+                onClick={handleAddNote}
+                className="px-4 py-2 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all"
+                aria-label="Add note to lead"
+              >
                 Add Note
               </button>
               <button
                 onClick={() => setSelectedLead(null)}
                 className="ml-auto px-4 py-2 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all"
+                aria-label="Close lead details"
               >
                 Close
               </button>

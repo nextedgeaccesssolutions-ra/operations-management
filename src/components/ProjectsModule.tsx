@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import PersistenceService from '../services/persistenceService';
+import { orchestrationEngine } from '../neas/orchestrationEngine';
 
 interface Project {
   id: string;
@@ -93,14 +95,28 @@ const sampleProjects: Project[] = [
 ];
 
 export default function ProjectsModule() {
-  const [projects] = useState<Project[]>(sampleProjects);
+  const [projects, setProjects] = useState<Project[]>(() => {
+    const saved = PersistenceService.loadModuleData<Project[]>('projects', []);
+    return saved.length > 0 ? saved : sampleProjects;
+  });
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'gantt'>('cards');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  // Save projects to localStorage when they change
+  useEffect(() => {
+    PersistenceService.saveModuleData('projects', projects);
+  }, [projects]);
 
   const filteredProjects = projects.filter(p => {
-    if (filterStatus === 'all') return true;
-    return p.status === filterStatus;
+    const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
+    const matchesSearch = searchQuery === '' || 
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.location.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesStatus && matchesSearch;
   });
 
   const getStatusColor = (status: string) => {
@@ -121,8 +137,95 @@ export default function ProjectsModule() {
   const totalActual = projects.reduce((sum, p) => sum + p.actualCost, 0);
   const activeProjects = projects.filter(p => p.status === 'active').length;
 
+  const handleUpdateStatus = (projectId: string, newStatus: Project['status']) => {
+    try {
+      setProjects(prev => prev.map(p => 
+        p.id === projectId ? { ...p, status: newStatus } : p
+      ));
+      if (selectedProject?.id === projectId) {
+        setSelectedProject(prev => prev ? { ...prev, status: newStatus } : null);
+      }
+      orchestrationEngine.addAuditLog(
+        'user',
+        'CEO',
+        'project_status_changed',
+        'project',
+        projectId,
+        `Project status changed to ${newStatus}`,
+        'info'
+      );
+      setError(null);
+    } catch (err) {
+      setError('Failed to update project status. Please try again.');
+      console.error('[ProjectsModule] Update status failed:', err);
+    }
+  };
+
+  const handleToggleMilestone = (projectId: string, milestoneIndex: number) => {
+    try {
+      setProjects(prev => prev.map(p => {
+        if (p.id === projectId) {
+          const newMilestones = [...p.milestones];
+          newMilestones[milestoneIndex] = {
+            ...newMilestones[milestoneIndex],
+            completed: !newMilestones[milestoneIndex].completed
+          };
+          return { ...p, milestones: newMilestones };
+        }
+        return p;
+      }));
+      if (selectedProject?.id === projectId) {
+        setSelectedProject(prev => {
+          if (!prev) return null;
+          const newMilestones = [...prev.milestones];
+          newMilestones[milestoneIndex] = {
+            ...newMilestones[milestoneIndex],
+            completed: !newMilestones[milestoneIndex].completed
+          };
+          return { ...prev, milestones: newMilestones };
+        });
+      }
+      setError(null);
+    } catch (err) {
+      setError('Failed to toggle milestone. Please try again.');
+      console.error('[ProjectsModule] Toggle milestone failed:', err);
+    }
+  };
+
+  const handleUpdateProgress = (projectId: string, newProgress: number) => {
+    try {
+      const clampedProgress = Math.max(0, Math.min(100, newProgress));
+      setProjects(prev => prev.map(p => 
+        p.id === projectId ? { ...p, progress: clampedProgress } : p
+      ));
+      if (selectedProject?.id === projectId) {
+        setSelectedProject(prev => prev ? { ...prev, progress: clampedProgress } : null);
+      }
+      setError(null);
+    } catch (err) {
+      setError('Failed to update progress. Please try again.');
+      console.error('[ProjectsModule] Update progress failed:', err);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Error Display */}
+      {error && (
+        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <div className="flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-300"
+              aria-label="Dismiss error"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="glass-card rounded-xl p-5">
@@ -138,19 +241,30 @@ export default function ProjectsModule() {
           <p className="text-xs text-slate-400 mt-1">Total Budget</p>
         </div>
         <div className="glass-card rounded-xl p-5">
-          <p className="text-3xl font-bold text-blue-400">{((totalActual / totalBudget) * 100).toFixed(1)}%</p>
+          <p className="text-3xl font-bold text-blue-400">{totalBudget > 0 ? ((totalActual / totalBudget) * 100).toFixed(1) : '0.0'}%</p>
           <p className="text-xs text-slate-400 mt-1">Budget Utilization</p>
         </div>
       </div>
 
       {/* Controls */}
       <div className="glass-card rounded-xl p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search projects..."
+              className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#CA9332]/50"
+              aria-label="Search projects by name, client, or location"
+            />
+            <label className="text-xs text-slate-400" htmlFor="project-status-filter">Status:</label>
             <select
+              id="project-status-filter"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white focus:outline-none focus:border-[#CA9332]/50"
+              aria-label="Filter projects by status"
             >
               <option value="all">All Status</option>
               <option value="planning">Planning</option>
@@ -165,6 +279,8 @@ export default function ProjectsModule() {
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 viewMode === 'cards' ? 'bg-[#CA9332]/20 text-[#EBC07E] border border-[#CA9332]/30' : 'text-slate-400'
               }`}
+              aria-label="Switch to cards view"
+              aria-pressed={viewMode === 'cards'}
             >
               Cards
             </button>
@@ -173,6 +289,8 @@ export default function ProjectsModule() {
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 viewMode === 'gantt' ? 'bg-[#CA9332]/20 text-[#EBC07E] border border-[#CA9332]/30' : 'text-slate-400'
               }`}
+              aria-label="Switch to timeline view"
+              aria-pressed={viewMode === 'gantt'}
             >
               Timeline
             </button>
@@ -182,12 +300,28 @@ export default function ProjectsModule() {
 
       {/* Projects List */}
       {viewMode === 'cards' ? (
+        filteredProjects.length === 0 ? (
+          <div className="glass-card rounded-xl p-12 text-center">
+            <div className="text-4xl mb-3">🏗️</div>
+            <p className="text-sm text-slate-400">No projects found</p>
+            <p className="text-xs text-slate-500 mt-1">Try changing the filter or search query</p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filteredProjects.map(project => (
             <div
               key={project.id}
               onClick={() => setSelectedProject(project)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSelectedProject(project);
+                }
+              }}
               className="glass-card rounded-xl p-5 cursor-pointer hover:border-[#CA9332]/30 transition-all"
+              role="button"
+              tabIndex={0}
+              aria-label={`View project: ${project.name}, ${project.status}, ${project.progress}% complete`}
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
@@ -238,9 +372,17 @@ export default function ProjectsModule() {
             </div>
           ))}
         </div>
+        )
       ) : (
         <div className="glass-card rounded-xl p-6">
           <h3 className="text-sm font-bold text-white mb-4">Project Timeline</h3>
+          {filteredProjects.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-4xl mb-3">📅</div>
+              <p className="text-sm text-slate-400">No projects found</p>
+              <p className="text-xs text-slate-500 mt-1">Try changing the filter or search query</p>
+            </div>
+          ) : (
           <div className="space-y-3">
             {filteredProjects.map(project => {
               const start = new Date(project.startDate).getTime();
@@ -251,7 +393,12 @@ export default function ProjectsModule() {
               const progress = (elapsed / totalDuration) * 100;
 
               return (
-                <div key={project.id} className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
+                <div 
+                  key={project.id} 
+                  className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30"
+                  role="article"
+                  aria-label={`Project timeline: ${project.name}, ${project.progress}% complete`}
+                >
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-white">{project.name}</span>
                     <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${getStatusColor(project.status)}`}>
@@ -262,10 +409,12 @@ export default function ProjectsModule() {
                     <div
                       className="absolute h-full bg-gradient-to-r from-[#CA9332]/50 to-[#EBC07E]/50 rounded"
                       style={{ width: `${progress}%` }}
+                      aria-label={`Time elapsed: ${progress.toFixed(0)}%`}
                     />
                     <div
                       className="absolute h-full bg-gradient-to-r from-[#CA9332] to-[#EBC07E] rounded"
                       style={{ width: `${project.progress}%` }}
+                      aria-label={`Progress: ${project.progress}%`}
                     />
                   </div>
                   <div className="flex items-center justify-between mt-1 text-[10px] text-slate-500">
@@ -277,6 +426,7 @@ export default function ProjectsModule() {
               );
             })}
           </div>
+          )}
         </div>
       )}
 
@@ -289,7 +439,13 @@ export default function ProjectsModule() {
                 <h2 className="text-xl font-bold text-white">{selectedProject.name}</h2>
                 <p className="text-sm text-slate-400 mt-1">{selectedProject.client} • {selectedProject.location}</p>
               </div>
-              <button onClick={() => setSelectedProject(null)} className="text-slate-400 hover:text-white text-2xl">✕</button>
+              <button 
+                onClick={() => setSelectedProject(null)} 
+                className="text-slate-400 hover:text-white text-2xl"
+                aria-label="Close project details"
+              >
+                ✕
+              </button>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mb-6">

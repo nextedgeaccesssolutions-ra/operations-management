@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { orchestrationEngine } from '../neas/orchestrationEngine';
+import PersistenceService from '../services/persistenceService';
 
 interface Workflow {
   id: string;
@@ -305,10 +306,20 @@ const sampleWorkflows: Workflow[] = [
 ];
 
 export default function WorkflowBuilder() {
-  const [workflows, setWorkflows] = useState<Workflow[]>(sampleWorkflows);
+  const [workflows, setWorkflows] = useState<Workflow[]>(() => {
+    const saved = PersistenceService.loadModuleData<Workflow[]>('workflows', []);
+    return saved.length > 0 ? saved : sampleWorkflows;
+  });
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newWorkflow, setNewWorkflow] = useState({ name: '', description: '', trigger: 'New email received' });
+  const [error, setError] = useState<string | null>(null);
+
+  // Save workflows to localStorage when they change
+  useEffect(() => {
+    PersistenceService.saveModuleData('workflows', workflows);
+  }, [workflows]);
 
   const filteredWorkflows = workflows.filter(w => {
     if (filterStatus === 'all') return true;
@@ -316,22 +327,80 @@ export default function WorkflowBuilder() {
   });
 
   const handleToggleStatus = (workflowId: string) => {
-    setWorkflows(prev => prev.map(w => {
-      if (w.id === workflowId) {
-        const newStatus = w.status === 'active' ? 'paused' : 'active';
-        orchestrationEngine.addAuditLog(
-          'user',
-          'CEO',
-          'workflow_status_changed',
-          'workflow',
-          workflowId,
-          `Workflow ${w.name} ${newStatus}`,
-          'info'
-        );
-        return { ...w, status: newStatus };
-      }
-      return w;
-    }));
+    try {
+      setWorkflows(prev => prev.map(w => {
+        if (w.id === workflowId) {
+          const newStatus = w.status === 'active' ? 'paused' : 'active';
+          orchestrationEngine.addAuditLog(
+            'user',
+            'CEO',
+            'workflow_status_changed',
+            'workflow',
+            workflowId,
+            `Workflow ${w.name} ${newStatus}`,
+            'info'
+          );
+          return { ...w, status: newStatus };
+        }
+        return w;
+      }));
+      setError(null);
+    } catch (err) {
+      setError('Failed to toggle workflow status. Please try again.');
+      console.error('[WorkflowBuilder] Toggle status failed:', err);
+    }
+  };
+
+  const handleCreateWorkflow = () => {
+    if (!newWorkflow.name.trim()) {
+      setError('Workflow name is required');
+      return;
+    }
+
+    try {
+      const workflow: Workflow = {
+        id: `workflow-${Date.now()}`,
+        name: newWorkflow.name,
+        description: newWorkflow.description,
+        trigger: newWorkflow.trigger,
+        status: 'draft',
+        steps: [],
+        executionCount: 0,
+        successRate: 0,
+        createdBy: 'CEO',
+        createdAt: new Date()
+      };
+
+      setWorkflows(prev => [...prev, workflow]);
+      orchestrationEngine.addAuditLog(
+        'user',
+        'CEO',
+        'workflow_created',
+        'workflow',
+        workflow.id,
+        `Created workflow: ${workflow.name}`,
+        'info'
+      );
+
+      setNewWorkflow({ name: '', description: '', trigger: 'New email received' });
+      setShowCreateModal(false);
+      setError(null);
+    } catch (err) {
+      setError('Failed to create workflow. Please try again.');
+      console.error('[WorkflowBuilder] Create workflow failed:', err);
+    }
+  };
+
+  const handleEditWorkflow = () => {
+    if (!selectedWorkflow) return;
+    // TODO: Implement edit functionality
+    setError('Edit functionality coming soon');
+  };
+
+  const handleViewHistory = () => {
+    if (!selectedWorkflow) return;
+    // TODO: Implement history view
+    setError('Execution history view coming soon');
   };
 
   const getStatusColor = (status: string) => {
@@ -367,6 +436,22 @@ export default function WorkflowBuilder() {
 
   return (
     <div className="space-y-6">
+      {/* Error Display */}
+      {error && (
+        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <div className="flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-300"
+              aria-label="Dismiss error"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -376,6 +461,7 @@ export default function WorkflowBuilder() {
         <button
           onClick={() => setShowCreateModal(true)}
           className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#CA9332] to-[#EBC07E] text-white text-xs font-medium hover:opacity-90 transition-all"
+          aria-label="Create new workflow"
         >
           + Create Workflow
         </button>
@@ -406,17 +492,22 @@ export default function WorkflowBuilder() {
       {/* Filters */}
       <div className="glass-card rounded-xl p-4">
         <div className="flex items-center gap-3">
-          <label className="text-xs text-slate-400">Status:</label>
+          <label className="text-xs text-slate-400" htmlFor="status-filter">Status:</label>
           <select
+            id="status-filter"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white focus:outline-none focus:border-[#CA9332]/50"
+            aria-label="Filter workflows by status"
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
             <option value="paused">Paused</option>
             <option value="draft">Draft</option>
           </select>
+          <div className="ml-auto text-xs text-slate-400">
+            Showing {filteredWorkflows.length} of {workflows.length} workflows
+          </div>
         </div>
       </div>
 
@@ -424,30 +515,48 @@ export default function WorkflowBuilder() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* List */}
         <div className="lg:col-span-1 space-y-3">
-          {filteredWorkflows.map(workflow => (
-            <div
-              key={workflow.id}
-              onClick={() => setSelectedWorkflow(workflow)}
-              className={`glass-card rounded-xl p-4 cursor-pointer transition-all ${
-                selectedWorkflow?.id === workflow.id
-                  ? 'border-[#CA9332]/30 bg-[#CA9332]/5'
-                  : 'hover:border-slate-600/30'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <h3 className="text-sm font-bold text-white">{workflow.name}</h3>
-                <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${getStatusColor(workflow.status)}`}>
-                  {workflow.status.toUpperCase()}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mb-3 line-clamp-2">{workflow.description}</p>
-              <div className="flex items-center justify-between text-[10px] text-slate-500">
-                <span>{workflow.steps.length} steps</span>
-                <span>{workflow.executionCount} executions</span>
-                <span className="text-green-400">{workflow.successRate}% success</span>
-              </div>
+          {filteredWorkflows.length === 0 ? (
+            <div className="glass-card rounded-xl p-8 text-center">
+              <div className="text-4xl mb-3">⚙️</div>
+              <p className="text-sm text-slate-400">No workflows found</p>
+              <p className="text-xs text-slate-500 mt-1">Try changing the filter or create a new workflow</p>
             </div>
-          ))}
+          ) : (
+            filteredWorkflows.map(workflow => (
+              <div
+                key={workflow.id}
+                onClick={() => setSelectedWorkflow(workflow)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedWorkflow(workflow);
+                  }
+                }}
+                className={`glass-card rounded-xl p-4 cursor-pointer transition-all ${
+                  selectedWorkflow?.id === workflow.id
+                    ? 'border-[#CA9332]/30 bg-[#CA9332]/5'
+                    : 'hover:border-slate-600/30'
+                }`}
+                role="button"
+                tabIndex={0}
+                aria-label={`View workflow: ${workflow.name}`}
+                aria-selected={selectedWorkflow?.id === workflow.id}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="text-sm font-bold text-white">{workflow.name}</h3>
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${getStatusColor(workflow.status)}`}>
+                    {workflow.status.toUpperCase()}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mb-3 line-clamp-2">{workflow.description}</p>
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span>{workflow.steps.length} steps</span>
+                  <span>{workflow.executionCount} executions</span>
+                  <span className="text-green-400">{workflow.successRate}% success</span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Detail */}
@@ -527,18 +636,28 @@ export default function WorkflowBuilder() {
                       ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
                       : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
                   }`}
+                  aria-label={selectedWorkflow.status === 'active' ? 'Pause workflow' : 'Activate workflow'}
                 >
                   {selectedWorkflow.status === 'active' ? '⏸ Pause' : '▶ Activate'}
                 </button>
-                <button className="px-4 py-2 rounded-lg bg-[#CA9332]/20 text-[#EBC07E] text-xs font-medium hover:bg-[#CA9332]/30 transition-all">
+                <button 
+                  onClick={handleEditWorkflow}
+                  className="px-4 py-2 rounded-lg bg-[#CA9332]/20 text-[#EBC07E] text-xs font-medium hover:bg-[#CA9332]/30 transition-all"
+                  aria-label="Edit workflow"
+                >
                   Edit Workflow
                 </button>
-                <button className="px-4 py-2 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all">
+                <button 
+                  onClick={handleViewHistory}
+                  className="px-4 py-2 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all"
+                  aria-label="View execution history"
+                >
                   View Execution History
                 </button>
                 <button
                   onClick={() => setSelectedWorkflow(null)}
                   className="ml-auto px-4 py-2 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all"
+                  aria-label="Close workflow details"
                 >
                   Close
                 </button>
@@ -563,24 +682,42 @@ export default function WorkflowBuilder() {
             <h2 className="text-xl font-bold text-white mb-4">Create New Workflow</h2>
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-slate-400 mb-2 block">Workflow Name</label>
+                <label className="text-xs text-slate-400 mb-2 block" htmlFor="workflow-name">
+                  Workflow Name <span className="text-red-400">*</span>
+                </label>
                 <input
+                  id="workflow-name"
                   type="text"
+                  value={newWorkflow.name}
+                  onChange={(e) => setNewWorkflow(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Enter workflow name..."
                   className="w-full px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#CA9332]/50"
+                  aria-required="true"
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400 mb-2 block">Description</label>
+                <label className="text-xs text-slate-400 mb-2 block" htmlFor="workflow-description">
+                  Description
+                </label>
                 <textarea
+                  id="workflow-description"
+                  value={newWorkflow.description}
+                  onChange={(e) => setNewWorkflow(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="Describe what this workflow does..."
                   className="w-full px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#CA9332]/50 resize-none"
                   rows={3}
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400 mb-2 block">Trigger</label>
-                <select className="w-full px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white focus:outline-none focus:border-[#CA9332]/50">
+                <label className="text-xs text-slate-400 mb-2 block" htmlFor="workflow-trigger">
+                  Trigger
+                </label>
+                <select
+                  id="workflow-trigger"
+                  value={newWorkflow.trigger}
+                  onChange={(e) => setNewWorkflow(prev => ({ ...prev, trigger: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white focus:outline-none focus:border-[#CA9332]/50"
+                >
                   <option>New email received</option>
                   <option>Daily schedule</option>
                   <option>Task completed</option>
@@ -589,14 +726,20 @@ export default function WorkflowBuilder() {
               </div>
               <div className="flex items-center gap-3 pt-4">
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={handleCreateWorkflow}
                   className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#CA9332] to-[#EBC07E] text-white text-xs font-medium hover:opacity-90 transition-all"
+                  aria-label="Create workflow"
                 >
                   Create Workflow
                 </button>
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setNewWorkflow({ name: '', description: '', trigger: 'New email received' });
+                    setError(null);
+                  }}
                   className="px-4 py-2 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all"
+                  aria-label="Cancel workflow creation"
                 >
                   Cancel
                 </button>

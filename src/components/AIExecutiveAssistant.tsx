@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { orchestrationEngine } from '../neas/orchestrationEngine';
 import { agents, getAgentById } from '../neas/agentRegistry';
+import PersistenceService from '../services/persistenceService';
 
 interface Message {
   id: string;
@@ -30,17 +31,30 @@ const commandSuggestions: CommandSuggestion[] = [
 ];
 
 export default function AIExecutiveAssistant() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'system',
-      content: 'Welcome to NEAS AI Executive Assistant. I can help you manage the company, analyze data, prepare reports, and coordinate with AI agents. What would you like me to do?',
-      timestamp: new Date()
+  const [messages, setMessages] = useState<Message[]>(() => {
+    // Load messages from localStorage
+    const saved = PersistenceService.loadModuleData<Message[]>('assistantMessages', []);
+    if (saved.length > 0) {
+      return saved;
     }
-  ]);
+    return [
+      {
+        id: '1',
+        role: 'system',
+        content: 'Welcome to NEAS AI Executive Assistant. I can help you manage the company, analyze data, prepare reports, and coordinate with AI agents. What would you like me to do?',
+        timestamp: new Date()
+      }
+    ];
+  });
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [error, setError] = useState<string | null>(null);
+
+  // Save messages to localStorage when they change
+  useEffect(() => {
+    PersistenceService.saveModuleData('assistantMessages', messages);
+  }, [messages]);
 
   const categories = ['all', 'Email', 'Sales', 'Projects', 'Estimating', 'Finance', 'Operations', 'Reporting', 'Risk'];
 
@@ -50,6 +64,7 @@ export default function AIExecutiveAssistant() {
 
   const processCommand = async (command: string) => {
     setIsProcessing(true);
+    setError(null);
     
     // Add user message
     const userMessage: Message = {
@@ -60,16 +75,17 @@ export default function AIExecutiveAssistant() {
     };
     setMessages(prev => [...prev, userMessage]);
 
-    // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-    // Analyze command and route to appropriate agent
-    let response: Message;
-    let taskCreated = false;
-    let agentAssigned: string | undefined;
-    let requiresApproval = false;
+      // Analyze command and route to appropriate agent
+      let response: Message;
+      let taskCreated = false;
+      let agentAssigned: string | undefined;
+      let requiresApproval = false;
 
-    const lowerCommand = command.toLowerCase();
+      const lowerCommand = command.toLowerCase();
 
     if (lowerCommand.includes('email') || lowerCommand.includes('summarize')) {
       // Route to CEO agent for email analysis
@@ -277,6 +293,20 @@ export default function AIExecutiveAssistant() {
 
     setMessages(prev => [...prev, response]);
     setIsProcessing(false);
+    } catch (error) {
+      console.error('[AIExecutiveAssistant] Command processing failed:', error);
+      setError('Failed to process command. Please try again.');
+      setIsProcessing(false);
+      
+      // Add error message to chat
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'system',
+        content: '⚠️ Sorry, I encountered an error processing your request. Please try again or contact support if the issue persists.',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -291,8 +321,37 @@ export default function AIExecutiveAssistant() {
     processCommand(suggestion);
   };
 
+  const handleClearChat = () => {
+    if (confirm('Are you sure you want to clear the chat history? This cannot be undone.')) {
+      setMessages([
+        {
+          id: '1',
+          role: 'system',
+          content: 'Welcome to NEAS AI Executive Assistant. I can help you manage the company, analyze data, prepare reports, and coordinate with AI agents. What would you like me to do?',
+          timestamp: new Date()
+        }
+      ]);
+    }
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)]">
+      {/* Error Display */}
+      {error && (
+        <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <div className="flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-300"
+              aria-label="Dismiss error"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="glass-card rounded-xl p-4 mb-4">
         <div className="flex items-center justify-between">
@@ -306,6 +365,13 @@ export default function AIExecutiveAssistant() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleClearChat}
+              className="px-3 py-1.5 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all"
+              aria-label="Clear chat history"
+            >
+              Clear Chat
+            </button>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
               <span className="text-[10px] text-green-400 font-medium">Online</span>
@@ -375,7 +441,7 @@ export default function AIExecutiveAssistant() {
       <div className="glass-card rounded-xl p-4 mb-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs text-slate-400">Quick Commands:</span>
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-wrap">
             {categories.map(cat => (
               <button
                 key={cat}
@@ -385,6 +451,8 @@ export default function AIExecutiveAssistant() {
                     ? 'bg-[#CA9332]/20 text-[#EBC07E] border border-[#CA9332]/30'
                     : 'bg-slate-800/30 text-slate-400 hover:bg-slate-800/50'
                 }`}
+                aria-label={`Filter by ${cat === 'all' ? 'all categories' : cat}`}
+                aria-pressed={selectedCategory === cat}
               >
                 {cat === 'all' ? 'All' : cat}
               </button>
@@ -392,17 +460,22 @@ export default function AIExecutiveAssistant() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {filteredSuggestions.map((suggestion, i) => (
-            <button
-              key={i}
-              onClick={() => handleSuggestionClick(suggestion.text)}
-              disabled={isProcessing}
-              className="px-3 py-1.5 rounded-lg bg-slate-800/30 border border-slate-700/30 text-xs text-slate-300 hover:bg-slate-800/50 hover:border-[#CA9332]/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="mr-1">{suggestion.icon}</span>
-              {suggestion.text}
-            </button>
-          ))}
+          {filteredSuggestions.length === 0 ? (
+            <p className="text-xs text-slate-500">No suggestions available for this category.</p>
+          ) : (
+            filteredSuggestions.map((suggestion, i) => (
+              <button
+                key={i}
+                onClick={() => handleSuggestionClick(suggestion.text)}
+                disabled={isProcessing}
+                className="px-3 py-1.5 rounded-lg bg-slate-800/30 border border-slate-700/30 text-xs text-slate-300 hover:bg-slate-800/50 hover:border-[#CA9332]/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label={`Execute command: ${suggestion.text}`}
+              >
+                <span className="mr-1" aria-hidden="true">{suggestion.icon}</span>
+                {suggestion.text}
+              </button>
+            ))
+          )}
         </div>
       </div>
 
@@ -416,15 +489,21 @@ export default function AIExecutiveAssistant() {
             placeholder="Type your command or question..."
             disabled={isProcessing}
             className="flex-1 px-4 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#CA9332]/50 disabled:opacity-50"
+            aria-label="Command input"
+            aria-describedby="command-help"
           />
           <button
             type="submit"
             disabled={!input.trim() || isProcessing}
             className="px-6 py-2 rounded-lg bg-gradient-to-r from-[#CA9332] to-[#EBC07E] text-white text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label={isProcessing ? 'Processing command' : 'Send command'}
           >
             {isProcessing ? 'Processing...' : 'Send'}
           </button>
         </div>
+        <p id="command-help" className="sr-only">
+          Type a command to interact with the AI Executive Assistant. Commands are processed and routed to appropriate AI agents.
+        </p>
       </form>
     </div>
   );
