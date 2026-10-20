@@ -104,11 +104,16 @@ export default function ProjectsModule() {
   const [viewMode, setViewMode] = useState<'cards' | 'gantt'>('cards');
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<'sample' | 'refrens'>('sample');
 
   // Save projects to localStorage when they change
   useEffect(() => {
     PersistenceService.saveModuleData('projects', projects);
   }, [projects]);
+
+  // Note: Refrens integration for projects requires backend API
+  // Currently using sample data with clear labeling
+  const isSampleData = dataSource === 'sample';
 
   const filteredProjects = projects.filter(p => {
     const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
@@ -226,23 +231,50 @@ export default function ProjectsModule() {
         </div>
       )}
 
+      {/* Data Source Indicator */}
+      {isSampleData && (
+        <div className="glass-card rounded-xl p-3 border-l-4 border-l-amber-500 bg-amber-500/5">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">⚠️</span>
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-amber-400">SAMPLE DATA</p>
+              <p className="text-[10px] text-slate-400">
+                Projects shown are sample data for demonstration. Real project data requires Refrens API integration (backend configuration needed).
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="glass-card rounded-xl p-5">
           <p className="text-3xl font-bold text-white">{projects.length}</p>
           <p className="text-xs text-slate-400 mt-1">Total Projects</p>
+          <p className="text-[9px] text-slate-500 mt-2">
+            Source: {isSampleData ? 'Sample Data' : 'Refrens'} • Updated: {new Date().toLocaleTimeString()}
+          </p>
         </div>
         <div className="glass-card rounded-xl p-5">
           <p className="text-3xl font-bold text-green-400">{activeProjects}</p>
           <p className="text-xs text-slate-400 mt-1">Active Projects</p>
+          <p className="text-[9px] text-slate-500 mt-2">
+            Source: {isSampleData ? 'Sample Data' : 'Refrens'} • Updated: {new Date().toLocaleTimeString()}
+          </p>
         </div>
         <div className="glass-card rounded-xl p-5">
           <p className="text-3xl font-bold text-[#EBC07E]">{formatCurrency(totalBudget)}</p>
           <p className="text-xs text-slate-400 mt-1">Total Budget</p>
+          <p className="text-[9px] text-slate-500 mt-2">
+            Source: {isSampleData ? 'Sample Data' : 'Refrens'} • Currency: PHP • Status: {isSampleData ? 'Estimated' : 'Actual'}
+          </p>
         </div>
         <div className="glass-card rounded-xl p-5">
           <p className="text-3xl font-bold text-blue-400">{totalBudget > 0 ? ((totalActual / totalBudget) * 100).toFixed(1) : '0.0'}%</p>
           <p className="text-xs text-slate-400 mt-1">Budget Utilization</p>
+          <p className="text-[9px] text-slate-500 mt-2">
+            Source: {isSampleData ? 'Sample Data' : 'Refrens'} • Status: {isSampleData ? 'Estimated' : 'Actual'}
+          </p>
         </div>
       </div>
 
