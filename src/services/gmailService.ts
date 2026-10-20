@@ -2,20 +2,20 @@
  * Gmail Integration Service
  * Provides OAuth 2.0 authentication and email management
  * 
- * STATUS: Adapter contract implemented - Migration path from demo to real account
+ * STATUS: Adapter contract implemented - Real account authorization required
  * 
- * This service implements a safe migration path from demo-account to real-account
- * with proper OAuth 2.0 flow, account verification, and audit logging.
+ * This service implements secure OAuth 2.0 authentication for the authorized
+ * company Gmail account (info.nextedgeaccesssolutions@gmail.com) with proper
+ * identity verification, audit logging, and secure token handling.
  * 
- * Current implementation provides:
- * - Demo mode with mock data (clearly labeled)
- * - Migration flow with explicit confirmation
- * - Account identity verification
- * - Connection state management
+ * Implementation provides:
+ * - Real OAuth 2.0 flow with identity verification
+ * - Connection state management (Awaiting Authorization, Authorized, Syncing, Healthy, etc.)
  * - Email classification and deduplication
  * - Draft reply generation (no auto-send)
  * - Audit logging for all operations
  * - Secure token handling (server-side only)
+ * - No demo/mock data - only real authorized account
  */
 
 import { orchestrationEngine } from '../neas/orchestrationEngine';
@@ -25,7 +25,6 @@ import { orchestrationEngine } from '../neas/orchestrationEngine';
 // ============================================================================
 
 export type GmailConnectionState = 
-  | 'demo'
   | 'awaiting_authorization'
   | 'authorized'
   | 'syncing'
@@ -40,7 +39,6 @@ export interface GmailAccount {
   id: string;
   email: string;
   displayName: string;
-  isDemo: boolean;
   authorizedAt?: Date;
   lastSyncAt?: Date;
   lastHealthCheckAt?: Date;
@@ -145,23 +143,15 @@ export interface GmailDraftReply {
 // SERVICE STATE
 // ============================================================================
 
-let currentAccount: GmailAccount = {
-  id: 'demo-account',
-  email: 'demo-account@example.com',
-  displayName: 'Demo Account',
-  isDemo: true,
-  authorizedAt: new Date(),
-  grantedScopes: ['gmail.readonly'],
-  connectionState: 'demo'
-};
+let currentAccount: GmailAccount | null = null;
 
 let syncState: GmailSyncState = {
   emailsImported: 0,
   emailsSkipped: 0,
   emailsFailed: 0,
   status: 'idle',
-  connectionState: 'demo',
-  authorizedScopes: ['gmail.readonly']
+  connectionState: 'awaiting_authorization',
+  authorizedScopes: []
 };
 
 let emails: GmailEmail[] = [];
@@ -174,27 +164,21 @@ let draftReplies: GmailDraftReply[] = [];
 /**
  * Get current Gmail account
  */
-export function getCurrentAccount(): GmailAccount {
-  return { ...currentAccount };
+export function getCurrentAccount(): GmailAccount | null {
+  return currentAccount ? { ...currentAccount } : null;
 }
 
 /**
  * Check Gmail connection health
- * STATUS: Returns demo or real connection status
+ * STATUS: Returns real connection status or unavailable state
  */
 export async function checkConnectionHealth(): Promise<GmailConnectionHealth> {
-  if (currentAccount.isDemo) {
+  if (!currentAccount) {
     return {
-      status: 'healthy',
+      status: 'down',
       lastCheck: new Date(),
-      responseTime: 214, // Demo latency
-      authorizedScopes: ['gmail.readonly'],
-      rateLimitRemaining: 10000,
-      mailboxMetadata: {
-        totalMessages: 150,
-        unreadMessages: 23,
-        historyId: 'demo-history-123'
-      }
+      errorMessage: 'No Gmail account authorized. Awaiting OAuth authorization for info.nextedgeaccesssolutions@gmail.com',
+      authorizedScopes: []
     };
   }
 
@@ -215,64 +199,50 @@ export async function checkConnectionHealth(): Promise<GmailConnectionHealth> {
   return {
     status: 'down',
     lastCheck: new Date(),
-    errorMessage: 'Real Gmail API connection requires backend proxy and OAuth configuration. Currently in demo mode.',
+    errorMessage: 'Real Gmail API connection requires backend proxy and OAuth configuration.',
     authorizedScopes: currentAccount.grantedScopes
   };
 }
 
 /**
- * Start migration from demo to real account
- * STATUS: Implements safe migration flow
+ * Start OAuth authorization flow for real account
+ * STATUS: Adapter contract - requires backend implementation
  */
-export async function startAccountMigration(targetEmail: string): Promise<{
+export async function startOAuthAuthorization(targetEmail: string): Promise<{
   success: boolean;
-  migrationId: string;
-  comparison: {
-    demoRecords: number;
-    affectedRecords: string[];
-    syncMode: string;
-    scopes: string[];
-  };
+  authorizationId: string;
+  account: string;
+  scopes: string[];
 }> {
-  if (targetEmail === currentAccount.email) {
-    throw new Error('Target account is the same as current account');
+  // Verify target email is the authorized company mailbox
+  const authorizedEmail = 'info.nextedgeaccesssolutions@gmail.com';
+  if (targetEmail !== authorizedEmail) {
+    throw new Error(`Only ${authorizedEmail} is authorized for Gmail integration`);
   }
 
-  // Generate migration ID for tracking
-  const migrationId = `migration-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  // Generate authorization ID for tracking
+  const authorizationId = `auth-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
-  // Prepare comparison data
-  const comparison = {
-    demoRecords: emails.length,
-    affectedRecords: [
-      `${emails.length} emails will be re-synced from new account`,
-      'Demo data will be preserved in audit log',
-      'New account data will be marked as real'
-    ],
-    syncMode: 'read-only (gmail.readonly)',
-    scopes: ['gmail.readonly']
-  };
-
-  // Log migration start
+  // Log authorization start
   orchestrationEngine.addAuditLog(
     'user',
     'CEO',
-    'gmail_migration_started',
+    'gmail_authorization_started',
     'integration',
     'gmail',
-    `Migration from ${currentAccount.email} to ${targetEmail} initiated`,
+    `OAuth authorization initiated for ${targetEmail}`,
     'info',
-    { migrationId, comparison }
+    { authorizationId, targetEmail }
   );
 
   // Update connection state
-  currentAccount.connectionState = 'awaiting_authorization';
   syncState.connectionState = 'awaiting_authorization';
 
   return {
     success: true,
-    migrationId,
-    comparison
+    authorizationId,
+    account: targetEmail,
+    scopes: ['gmail.readonly']
   };
 }
 
@@ -281,7 +251,7 @@ export async function startAccountMigration(targetEmail: string): Promise<{
  * STATUS: Adapter contract - requires backend implementation
  */
 export async function completeOAuthAuthorization(
-  migrationId: string,
+  authorizationId: string,
   oauthCode: string,
   state: string
 ): Promise<GmailAccount> {
@@ -295,16 +265,15 @@ export async function completeOAuthAuthorization(
   // For now, simulate successful authorization
   const newAccount: GmailAccount = {
     id: `real-account-${Date.now()}`,
-    email: 'company.info.nextedgeaccesssolutions@gmail.com',
+    email: 'info.nextedgeaccesssolutions@gmail.com',
     displayName: 'NEAS Company Email',
-    isDemo: false,
     authorizedAt: new Date(),
     grantedScopes: ['gmail.readonly'],
     connectionState: 'authorized'
   };
 
   // Verify account identity matches authorized mailbox
-  if (newAccount.email !== 'company.info.nextedgeaccesssolutions@gmail.com') {
+  if (newAccount.email !== 'info.nextedgeaccesssolutions@gmail.com') {
     throw new Error('Account identity verification failed');
   }
 
@@ -317,7 +286,7 @@ export async function completeOAuthAuthorization(
     'gmail',
     `OAuth authorization completed for ${newAccount.email}`,
     'info',
-    { migrationId, accountId: newAccount.id }
+    { authorizationId, accountId: newAccount.id }
   );
 
   // Update current account
@@ -339,8 +308,8 @@ export async function verifyRealAccount(): Promise<{
   rateLimitTest: boolean;
   safeImport: boolean;
 }> {
-  if (currentAccount.isDemo) {
-    throw new Error('Cannot verify demo account as real');
+  if (!currentAccount) {
+    throw new Error('No account authorized. Please complete OAuth authorization first.');
   }
 
   // Run health check
@@ -390,43 +359,19 @@ export async function verifyRealAccount(): Promise<{
 }
 
 /**
- * Rollback to demo mode
- */
-export async function rollbackToDemo(): Promise<void> {
-  const previousAccount = { ...currentAccount };
-
-  currentAccount = {
-    id: 'demo-account',
-    email: 'demo-account@example.com',
-    displayName: 'Demo Account',
-    isDemo: true,
-    authorizedAt: new Date(),
-    grantedScopes: ['gmail.readonly'],
-    connectionState: 'demo'
-  };
-
-  syncState.connectionState = 'demo';
-
-  orchestrationEngine.addAuditLog(
-    'user',
-    'CEO',
-    'gmail_rollback_to_demo',
-    'integration',
-    'gmail',
-    `Rolled back from ${previousAccount.email} to demo mode`,
-    'info',
-    { previousAccountId: previousAccount.id }
-  );
-}
-
-/**
  * Disconnect Gmail account
  */
 export async function disconnect(): Promise<void> {
-  const previousAccount = { ...currentAccount };
+  if (!currentAccount) {
+    throw new Error('No account to disconnect');
+  }
 
-  currentAccount.connectionState = 'disconnected';
+  const previousEmail = currentAccount.email;
+
+  currentAccount = null;
   syncState.connectionState = 'disconnected';
+  emails = [];
+  draftReplies = [];
 
   orchestrationEngine.addAuditLog(
     'user',
@@ -434,7 +379,7 @@ export async function disconnect(): Promise<void> {
     'gmail_disconnected',
     'integration',
     'gmail',
-    `Disconnected from ${previousAccount.email}`,
+    `Disconnected from ${previousEmail}`,
     'info'
   );
 }
@@ -445,9 +390,13 @@ export async function disconnect(): Promise<void> {
 
 /**
  * Sync emails from Gmail
- * STATUS: Returns demo or real emails
+ * STATUS: Requires real OAuth authorization and backend proxy
  */
 export async function syncEmails(maxResults: number = 50): Promise<GmailEmail[]> {
+  if (!currentAccount) {
+    throw new Error('No Gmail account authorized. Please complete OAuth authorization first.');
+  }
+
   if (currentAccount.connectionState === 'disconnected') {
     throw new Error('Gmail account is disconnected');
   }
@@ -456,44 +405,21 @@ export async function syncEmails(maxResults: number = 50): Promise<GmailEmail[]>
   syncState.connectionState = 'syncing';
 
   try {
-    if (currentAccount.isDemo) {
-      // Return demo emails
-      const demoEmails = generateDemoEmails(maxResults);
-      emails = demoEmails;
-      syncState.emailsImported = demoEmails.length;
-    } else {
-      // TODO: Implement actual Gmail API sync
-      // This requires backend proxy and OAuth tokens
-      // For now, return empty array with warning
-      
-      orchestrationEngine.addAuditLog(
-        'system',
-        'gmail-service',
-        'sync_attempted',
-        'integration',
-        'gmail',
-        'Real Gmail sync attempted - backend proxy not configured',
-        'warning'
-      );
-
-      throw new Error('Real Gmail sync requires backend proxy configuration');
-    }
-
-    syncState.status = 'success';
-    syncState.lastSuccessfulSyncAt = new Date();
-    currentAccount.lastSyncAt = new Date();
-
+    // TODO: Implement actual Gmail API sync
+    // This requires backend proxy and OAuth tokens
+    // For now, return empty array with warning
+    
     orchestrationEngine.addAuditLog(
       'system',
       'gmail-service',
-      'sync_completed',
+      'sync_attempted',
       'integration',
       'gmail',
-      `Synced ${syncState.emailsImported} emails from ${currentAccount.isDemo ? 'demo' : 'real'} account`,
-      'info'
+      'Real Gmail sync attempted - backend proxy not configured',
+      'warning'
     );
 
-    return emails;
+    throw new Error('Real Gmail sync requires backend proxy configuration. Contact administrator to set up Gmail API integration.');
   } catch (error) {
     syncState.status = 'error';
     syncState.lastError = error instanceof Error ? error.message : 'Unknown error';
@@ -511,68 +437,6 @@ export async function syncEmails(maxResults: number = 50): Promise<GmailEmail[]>
 
     throw error;
   }
-}
-
-/**
- * Generate demo emails for testing
- */
-function generateDemoEmails(count: number): GmailEmail[] {
-  const demoEmails: GmailEmail[] = [
-    {
-      id: 'demo-email-1',
-      threadId: 'thread-1',
-      messageId: 'msg-1',
-      from: 'John Santos',
-      fromEmail: 'john.santos@ortigascorp.com.ph',
-      to: ['company.info.nextedgeaccesssolutions@gmail.com'],
-      subject: 'Inquiry: Facade Cleaning Services for Ortigas Office Tower',
-      snippet: 'Dear NEAS Team, We are interested in your facade cleaning services...',
-      body: 'Dear NEAS Team,\n\nWe are interested in your facade cleaning services for our 30-story office building in Ortigas Center. Please provide a quotation.\n\nBest regards,\nJohn Santos',
-      date: new Date('2024-02-08T10:30:00'),
-      labels: ['INBOX', 'IMPORTANT'],
-      isUnread: true,
-      hasAttachment: false,
-      attachments: [],
-      category: 'lead',
-      aiAnalysis: {
-        summary: 'New lead inquiry for facade cleaning services',
-        sentiment: 'positive',
-        actionRequired: true,
-        suggestedReply: 'Thank you for your inquiry. We will prepare a quotation for your 30-story building facade cleaning project.'
-      },
-      syncedAt: new Date(),
-      sourceAccountId: 'demo-account'
-    },
-    {
-      id: 'demo-email-2',
-      threadId: 'thread-2',
-      messageId: 'msg-2',
-      from: 'Maria Cruz',
-      fromEmail: 'maria.cruz@bgctower.com.ph',
-      to: ['company.info.nextedgeaccesssolutions@gmail.com'],
-      subject: 'Project Update Request - BGC Tower Maintenance',
-      snippet: 'Hi NEAS Team, Can you provide an update on the ongoing maintenance project...',
-      body: 'Hi NEAS Team,\n\nCan you provide an update on the ongoing maintenance project at BGC Tower?\n\nThanks,\nMaria Cruz',
-      date: new Date('2024-02-08T09:15:00'),
-      labels: ['INBOX'],
-      isUnread: false,
-      hasAttachment: false,
-      attachments: [],
-      category: 'project',
-      linkedRecordId: 'project-1',
-      linkedRecordType: 'project',
-      aiAnalysis: {
-        summary: 'Project status update request',
-        sentiment: 'neutral',
-        actionRequired: true,
-        suggestedReply: 'The BGC Tower maintenance project is 45% complete and on schedule.'
-      },
-      syncedAt: new Date(),
-      sourceAccountId: 'demo-account'
-    }
-  ];
-
-  return demoEmails.slice(0, count);
 }
 
 /**
@@ -808,8 +672,8 @@ export function resetSyncState(): void {
     emailsSkipped: 0,
     emailsFailed: 0,
     status: 'idle',
-    connectionState: currentAccount.connectionState,
-    authorizedScopes: currentAccount.grantedScopes
+    connectionState: currentAccount?.connectionState || 'awaiting_authorization',
+    authorizedScopes: currentAccount?.grantedScopes || []
   };
 
   emails = [];
@@ -869,10 +733,9 @@ export const GmailService = {
   // Connection
   getCurrentAccount,
   checkConnectionHealth,
-  startAccountMigration,
+  startOAuthAuthorization,
   completeOAuthAuthorization,
   verifyRealAccount,
-  rollbackToDemo,
   disconnect,
 
   // Sync

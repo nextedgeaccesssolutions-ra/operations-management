@@ -1,123 +1,11 @@
 import { useState, useEffect } from 'react';
 import GmailService, { GmailEmail } from '../services/gmailService';
 import { orchestrationEngine } from '../neas/orchestrationEngine';
-
-interface Email {
-  id: string;
-  from: string;
-  fromEmail: string;
-  subject: string;
-  preview: string;
-  body: string;
-  date: string;
-  category: string;
-  priority: 'urgent' | 'high' | 'normal' | 'low';
-  read: boolean;
-  starred: boolean;
-  hasAttachment: boolean;
-  aiClassification?: string;
-  aiSummary?: string;
-  aiSuggestedReply?: string;
-  source: 'demo' | 'gmail';
-  sourceId?: string;
-}
-
-const mockEmails: Email[] = [
-  {
-    id: '1',
-    from: 'John Santos',
-    fromEmail: 'john.santos@ortigascorp.com.ph',
-    subject: 'Inquiry: Facade Cleaning Services for Ortigas Office Tower',
-    preview: 'Dear NEAS Team, We are interested in your facade cleaning services for our 30-story office building...',
-    body: 'Dear NEAS Team,\n\nWe are interested in your facade cleaning services for our 30-story office building located in Ortigas Center. The building requires regular cleaning every quarter.\n\nPlease provide:\n1. Preliminary quotation\n2. Schedule availability\n3. Safety certifications\n4. References from similar projects\n\nLooking forward to your prompt response.\n\nBest regards,\nJohn Santos\nFacilities Manager\nOrtigas Corporation',
-    date: '2024-02-08T10:30:00',
-    category: 'New Lead',
-    priority: 'high',
-    read: false,
-    starred: true,
-    hasAttachment: true,
-    aiClassification: 'Sales Lead - Facade Cleaning',
-    aiSummary: 'New inquiry from Ortigas Corporation for quarterly facade cleaning of 30-story building. Requesting quotation, schedule, certifications, and references.',
-    aiSuggestedReply: 'Thank you for your inquiry. We would be pleased to provide a comprehensive proposal for your facade cleaning requirements. Our team will prepare a detailed quotation including safety certifications and project references within 24 hours.',
-    source: 'demo'
-  },
-  {
-    id: '2',
-    from: 'Maria Cruz',
-    fromEmail: 'maria.cruz@bgctower.com.ph',
-    subject: 'Project Update Request - BGC Tower Maintenance',
-    preview: 'Hi NEAS Team, Can you provide an update on the ongoing maintenance project at BGC Tower...',
-    body: 'Hi NEAS Team,\n\nCan you provide an update on the ongoing maintenance project at BGC Tower? We need to know:\n1. Current progress percentage\n2. Any delays or issues\n3. Expected completion date\n4. Next scheduled activities\n\nPlease respond by EOD.\n\nThanks,\nMaria Cruz\nProject Coordinator\nBGC Tower Management',
-    date: '2024-02-08T09:15:00',
-    category: 'Active Project',
-    priority: 'high',
-    read: false,
-    starred: false,
-    hasAttachment: false,
-    aiClassification: 'Project Status Request',
-    aiSummary: 'Request for project update on BGC Tower maintenance. Needs progress %, delays, completion date, and next activities by EOD.',
-    aiSuggestedReply: 'Good day Maria. The BGC Tower maintenance project is currently at 65% completion. We are on schedule with no delays. Expected completion is February 20, 2024. Next activity: installation of anchor points on floors 25-30.',
-    source: 'demo'
-  },
-  {
-    id: '3',
-    from: 'Roberto Reyes',
-    fromEmail: 'roberto.reyes@supplies.com.ph',
-    subject: 'Quotation: PPE Supplies - Q1 2024',
-    preview: 'Dear NEAS, Please find attached our quotation for Q1 2024 PPE supplies including harnesses...',
-    body: 'Dear NEAS,\n\nPlease find attached our quotation for Q1 2024 PPE supplies including:\n- Full body harnesses (50 units)\n- Helmets (100 units)\n- Safety shoes (75 pairs)\n- Gloves (200 pairs)\n\nDelivery: 5-7 working days\nPayment terms: 30 days\nValidity: 60 days\n\nBest regards,\nRoberto Reyes\nSales Manager\nSafety Supplies Inc.',
-    date: '2024-02-07T16:45:00',
-    category: 'Procurement',
-    priority: 'normal',
-    read: true,
-    starred: false,
-    hasAttachment: true,
-    aiClassification: 'Supplier Quotation',
-    aiSummary: 'PPE supplier quotation for Q1 2024: harnesses, helmets, shoes, gloves. 30-day payment terms, 60-day validity.',
-    aiSuggestedReply: 'Thank you for the quotation. We will review and compare with other suppliers. Will respond within 3 working days.',
-    source: 'demo'
-  },
-  {
-    id: '4',
-    from: 'Anna Lim',
-    fromEmail: 'anna.lim@cebuport.com.ph',
-    subject: 'URGENT: Safety Incident Report - Cebu Project',
-    preview: 'NEAS Team, We need to report a safety incident that occurred at the Cebu port project site today...',
-    body: 'NEAS Team,\n\nWe need to report a safety incident that occurred at the Cebu port project site today at 14:30.\n\nIncident Details:\n- Type: Minor injury\n- Personnel: Juan Dela Cruz (Rigger)\n- Description: Slip on wet surface, minor ankle sprain\n- Action taken: First aid administered, sent to clinic\n- Status: Employee cleared to return to work tomorrow\n\nPlease provide:\n1. Incident report form\n2. Corrective action plan\n3. Updated risk assessment\n\nThis requires immediate attention.\n\nRegards,\nAnna Lim\nSafety Officer\nCebu Port Authority',
-    date: '2024-02-08T14:35:00',
-    category: 'Safety Incident',
-    priority: 'urgent',
-    read: false,
-    starred: true,
-    hasAttachment: false,
-    aiClassification: 'Safety Incident Report',
-    aiSummary: 'URGENT: Minor safety incident at Cebu port project. Employee slipped, minor ankle sprain. Requires incident report, corrective action plan, and updated risk assessment.',
-    aiSuggestedReply: 'We acknowledge receipt of the incident report. Our HSE team will prepare the required documentation within 24 hours. Corrective actions include improved surface drainage and additional signage. We will submit the complete report by tomorrow EOD.',
-    source: 'demo'
-  },
-  {
-    id: '5',
-    from: 'Finance Department',
-    fromEmail: 'finance@neas.com.ph',
-    subject: 'Invoice #2024-0156 - Payment Reminder',
-    preview: 'This is a reminder that Invoice #2024-0156 for ₱450,000 is now 15 days overdue...',
-    body: 'Dear Client,\n\nThis is a reminder that Invoice #2024-0156 for ₱450,000 is now 15 days overdue.\n\nInvoice Details:\n- Invoice #: 2024-0156\n- Amount: ₱450,000\n- Due Date: January 24, 2024\n- Days Overdue: 15\n- Project: Makati Office Facade Maintenance\n\nPlease arrange payment at your earliest convenience.\n\nIf you have already sent payment, please disregard this notice.\n\nBest regards,\nNEAS Finance Department',
-    date: '2024-02-08T08:00:00',
-    category: 'Billing',
-    priority: 'high',
-    read: true,
-    starred: false,
-    hasAttachment: true,
-    aiClassification: 'Payment Reminder - Outgoing',
-    aiSummary: 'Payment reminder for overdue invoice #2024-0156 (₱450,000) - 15 days overdue for Makati Office project.',
-    aiSuggestedReply: 'N/A - This is an outgoing payment reminder',
-    source: 'demo'
-  }
-];
+import { formatDate, formatTime } from '../utils/dateFormatter';
 
 export default function EmailCenter() {
-  const [emails, setEmails] = useState<Email[]>(mockEmails);
-  const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+  const [emails, setEmails] = useState<GmailEmail[]>([]);
+  const [selectedEmail, setSelectedEmail] = useState<GmailEmail | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAIPanel, setShowAIPanel] = useState(false);
@@ -126,7 +14,7 @@ export default function EmailCenter() {
   const [gmailAccount, setGmailAccount] = useState<any>(null);
   const [gmailHealth, setGmailHealth] = useState<any>(null);
 
-  const categories = ['all', 'New Lead', 'Active Project', 'Procurement', 'Safety Incident', 'Billing'];
+  const categories = ['all', 'lead', 'project', 'quotation', 'procurement', 'safety', 'finance', 'complaint', 'spam', 'unclassified'];
 
   // Load Gmail account and sync emails
   useEffect(() => {
@@ -143,46 +31,10 @@ export default function EmailCenter() {
       
       setGmailAccount(account);
       setGmailHealth(health);
-      
-      // Merge demo emails with Gmail emails (if any)
-      const mergedEmails = [...mockEmails];
-      gmailEmails.forEach(gmailEmail => {
-        if (!mergedEmails.find(e => e.sourceId === gmailEmail.id)) {
-          mergedEmails.push(convertGmailEmail(gmailEmail));
-        }
-      });
-      
-      setEmails(mergedEmails);
+      setEmails(gmailEmails);
     } catch (err) {
-      console.error('[EmailCenter] Failed to load Gmail data:', err);
+      console.error('[EmailCenter] Failed to load Gmail ', err);
     }
-  };
-
-  const convertGmailEmail = (gmailEmail: GmailEmail): Email => {
-    return {
-      id: gmailEmail.id,
-      from: gmailEmail.from,
-      fromEmail: gmailEmail.fromEmail,
-      subject: gmailEmail.subject,
-      preview: gmailEmail.snippet,
-      body: gmailEmail.body,
-      date: gmailEmail.date.toISOString(),
-      category: gmailEmail.category === 'lead' ? 'New Lead' :
-                gmailEmail.category === 'project' ? 'Active Project' :
-                gmailEmail.category === 'quotation' ? 'Procurement' :
-                gmailEmail.category === 'safety' ? 'Safety Incident' :
-                gmailEmail.category === 'finance' ? 'Billing' :
-                'Uncategorized',
-      priority: gmailEmail.aiAnalysis?.actionRequired ? 'high' : 'normal',
-      read: !gmailEmail.isUnread,
-      starred: false,
-      hasAttachment: gmailEmail.hasAttachment,
-      aiClassification: gmailEmail.aiAnalysis?.summary || 'Email from Gmail',
-      aiSummary: gmailEmail.aiAnalysis?.summary || '',
-      aiSuggestedReply: gmailEmail.aiAnalysis?.suggestedReply || '',
-      source: 'gmail',
-      sourceId: gmailEmail.id
-    };
   };
 
   const handleSyncEmails = async () => {
@@ -210,16 +62,37 @@ export default function EmailCenter() {
   };
 
   const handleMarkAsRead = (emailId: string) => {
-    setEmails(prev => prev.map(e => e.id === emailId ? { ...e, read: true } : e));
+    // In a real implementation, this would call Gmail API to mark as read
+    // For now, just update local state
+    setEmails(prev => prev.map(e => e.id === emailId ? { ...e, isUnread: false } : e));
     if (selectedEmail?.id === emailId) {
-      setSelectedEmail(prev => prev ? { ...prev, read: true } : null);
+      setSelectedEmail(prev => prev ? { ...prev, isUnread: false } : null);
     }
+    
+    orchestrationEngine.addAuditLog(
+      'user',
+      'CEO',
+      'email_marked_read',
+      'email',
+      emailId,
+      'Email marked as read',
+      'info'
+    );
   };
 
   const handleToggleStar = (emailId: string) => {
-    setEmails(prev => prev.map(e => e.id === emailId ? { ...e, starred: !e.starred } : e));
-    if (selectedEmail?.id === emailId) {
-      setSelectedEmail(prev => prev ? { ...prev, starred: !prev.starred } : null);
+    // In a real implementation, this would call Gmail API to toggle star
+    // For now, just update local state
+    const email = emails.find(e => e.id === emailId);
+    if (email) {
+      const newLabels = email.labels.includes('STARRED') 
+        ? email.labels.filter(l => l !== 'STARRED')
+        : [...email.labels, 'STARRED'];
+      
+      setEmails(prev => prev.map(e => e.id === emailId ? { ...e, labels: newLabels } : e));
+      if (selectedEmail?.id === emailId) {
+        setSelectedEmail(prev => prev ? { ...prev, labels: newLabels } : null);
+      }
     }
   };
 
@@ -230,9 +103,30 @@ export default function EmailCenter() {
     return true;
   });
 
-  const unreadCount = emails.filter(e => !e.read).length;
-  const gmailEmailCount = emails.filter(e => e.source === 'gmail').length;
-  const demoEmailCount = emails.filter(e => e.source === 'demo').length;
+  const unreadCount = emails.filter(e => e.isUnread).length;
+
+  // If no account is authorized, show authorization prompt
+  if (!gmailAccount) {
+    return (
+      <div className="space-y-6">
+        <div className="glass-card rounded-xl p-12 text-center">
+          <div className="text-6xl mb-4">📧</div>
+          <h2 className="text-xl font-bold text-white mb-2">Gmail Authorization Required</h2>
+          <p className="text-sm text-slate-400 mb-6">
+            Email Center requires OAuth 2.0 authorization for info.nextedgeaccesssolutions@gmail.com.
+            Please authorize your Gmail account to view and manage emails.
+          </p>
+          <button
+            onClick={() => window.location.hash = '#/gmail-migration'}
+            className="px-6 py-3 rounded-lg bg-gradient-to-r from-[#CA9332] to-[#EBC07E] text-white text-sm font-medium hover:opacity-90 transition-all"
+            aria-label="Go to Gmail authorization"
+          >
+            🔐 Authorize Gmail Account
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -261,15 +155,12 @@ export default function EmailCenter() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">Gmail Integration</h3>
-              <p className="text-[10px] text-slate-400">
-                {gmailAccount?.email || 'company.info.nextedgeaccesssolutions@gmail.com'}
-                {gmailAccount?.isDemo && <span className="ml-2 text-amber-400">(Demo Mode)</span>}
-              </p>
+              <p className="text-[10px] text-slate-400">{gmailAccount?.email || 'Not authorized'}</p>
               {gmailHealth && (
                 <p className="text-[9px] text-slate-500 mt-1">
                   Status: <span className={gmailHealth.status === 'healthy' ? 'text-green-400' : 'text-amber-400'}>
                     {gmailHealth.status}
-                  </span> • Latency: {gmailHealth.responseTime || 'N/A'}ms • Last checked: {gmailHealth.lastCheck?.toLocaleTimeString()}
+                  </span> • Latency: {gmailHealth.responseTime || 'N/A'}ms • Last checked: {formatTime(gmailHealth.lastCheck)}
                 </p>
               )}
             </div>
@@ -278,7 +169,7 @@ export default function EmailCenter() {
             <div className="text-right">
               <p className="text-xs text-slate-400">Last Sync</p>
               <p className="text-[10px] text-green-400">
-                {gmailAccount?.lastSyncAt ? gmailAccount.lastSyncAt.toLocaleTimeString() : 'Never'}
+                {gmailAccount?.lastSyncAt ? formatTime(gmailAccount.lastSyncAt) : 'Never'}
               </p>
             </div>
             <button 
@@ -295,8 +186,10 @@ export default function EmailCenter() {
         {/* Data Source Attribution */}
         <div className="mt-3 pt-3 border-t border-slate-700/30">
           <p className="text-[10px] text-slate-500">
-            Showing {emails.length} emails: {demoEmailCount} demo, {gmailEmailCount} from Gmail
-            {gmailAccount?.isDemo && <span className="ml-2 text-amber-400">• Demo account - migrate to real account for live data</span>}
+            Showing {emails.length} emails from authorized Gmail account
+            {gmailAccount?.connectionState !== 'healthy' && (
+              <span className="ml-2 text-amber-400">• Connection: {gmailAccount?.connectionState}</span>
+            )}
           </p>
         </div>
       </div>
@@ -306,7 +199,7 @@ export default function EmailCenter() {
         <div className="glass-card rounded-xl p-4">
           <p className="text-2xl font-bold text-white">{emails.length}</p>
           <p className="text-xs text-slate-400">Total Emails</p>
-          <p className="text-[9px] text-slate-500 mt-1">Source: {gmailAccount?.isDemo ? 'Demo' : 'Gmail'}</p>
+          <p className="text-[9px] text-slate-500 mt-1">Source: Gmail • Status: Actual</p>
         </div>
         <div className="glass-card rounded-xl p-4">
           <p className="text-2xl font-bold text-blue-400">{unreadCount}</p>
@@ -314,12 +207,12 @@ export default function EmailCenter() {
           <p className="text-[9px] text-slate-500 mt-1">Status: Actual</p>
         </div>
         <div className="glass-card rounded-xl p-4">
-          <p className="text-2xl font-bold text-green-400">{emails.filter(e => e.category === 'New Lead').length}</p>
+          <p className="text-2xl font-bold text-green-400">{emails.filter(e => e.category === 'lead').length}</p>
           <p className="text-xs text-slate-400">New Leads</p>
           <p className="text-[9px] text-slate-500 mt-1">Classified by AI</p>
         </div>
         <div className="glass-card rounded-xl p-4">
-          <p className="text-2xl font-bold text-red-400">{emails.filter(e => e.priority === 'urgent').length}</p>
+          <p className="text-2xl font-bold text-red-400">{emails.filter(e => e.category === 'safety' || e.labels.includes('IMPORTANT')).length}</p>
           <p className="text-xs text-slate-400">Urgent</p>
           <p className="text-[9px] text-slate-500 mt-1">Requires attention</p>
         </div>
@@ -338,15 +231,17 @@ export default function EmailCenter() {
             placeholder="Search emails..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#CA9332]/50"
+            className="flex-1 min-w-[200px] px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#CA9332]/50"
+            aria-label="Search emails by subject or sender"
           />
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
             className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white focus:outline-none focus:border-[#CA9332]/50"
+            aria-label="Filter emails by category"
           >
             {categories.map(cat => (
-              <option key={cat} value={cat}>{cat === 'all' ? 'All Categories' : cat}</option>
+              <option key={cat} value={cat}>{cat === 'all' ? 'All Categories' : cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
             ))}
           </select>
         </div>
@@ -357,165 +252,224 @@ export default function EmailCenter() {
         {/* Email List */}
         <div className="lg:col-span-1 glass-card rounded-xl p-4">
           <h3 className="text-sm font-bold text-white mb-3">Inbox ({filteredEmails.length})</h3>
-          <div className="space-y-2 max-h-[600px] overflow-y-auto">
-            {filteredEmails.map(email => (
-              <div
-                key={email.id}
-                onClick={() => {
-                  setSelectedEmail(email);
-                  setShowAIPanel(false);
-                }}
-                className={`p-3 rounded-lg cursor-pointer transition-all ${
-                  selectedEmail?.id === email.id
-                    ? 'bg-[#CA9332]/10 border border-[#CA9332]/30'
-                    : 'bg-slate-800/30 border border-slate-700/30 hover:border-slate-600/30'
-                } ${!email.read ? 'border-l-2 border-l-blue-500' : ''}`}
-              >
-                <div className="flex items-start justify-between mb-1">
-                  <div className="flex items-center gap-2 flex-1">
-                    {email.starred && <span className="text-amber-400 text-xs">★</span>}
-                    <span className="text-xs font-semibold text-white truncate">{email.from}</span>
+          {filteredEmails.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">
+              <div className="text-4xl mb-2">📭</div>
+              <p className="text-sm">No emails found</p>
+              <p className="text-xs mt-1">Try adjusting your search or filter, or sync emails from Gmail</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              {filteredEmails.map(email => (
+                <div
+                  key={email.id}
+                  onClick={() => {
+                    setSelectedEmail(email);
+                    setShowAIPanel(false);
+                  }}
+                  className={`p-3 rounded-xl cursor-pointer transition-all ${
+                    selectedEmail?.id === email.id
+                      ? 'bg-[#CA9332]/10 border border-[#CA9332]/30'
+                      : 'bg-slate-800/30 border border-slate-700/30 hover:border-slate-600/30'
+                  } ${email.isUnread ? 'border-l-2 border-l-blue-500' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Email from ${email.from}: ${email.subject}`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedEmail(email);
+                      setShowAIPanel(false);
+                    }
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="flex items-center gap-2 flex-1">
+                      {email.labels.includes('STARRED') && <span className="text-amber-400 text-xs">★</span>}
+                      <span className="text-xs font-semibold text-white truncate">{email.from}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 flex-shrink-0">
+                      {formatDate(email.date)}
+                    </span>
                   </div>
-                  <span className="text-[10px] text-slate-500 flex-shrink-0">
-                    {new Date(email.date).toLocaleDateString()}
-                  </span>
-                </div>
-                <p className="text-xs text-white font-medium mb-1 truncate">{email.subject}</p>
-                <p className="text-[10px] text-slate-400 line-clamp-2">{email.preview}</p>
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <span className={`px-2 py-0.5 rounded text-[9px] font-medium ${
-                    email.priority === 'urgent' ? 'bg-red-500/20 text-red-400' :
-                    email.priority === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                    'bg-slate-700/50 text-slate-400'
-                  }`}>
-                    {email.priority}
-                  </span>
-                  <span className="px-2 py-0.5 rounded bg-slate-700/50 text-[9px] text-slate-400">
-                    {email.category}
-                  </span>
-                  {email.source === 'gmail' && (
+                  <p className={`text-xs mb-1 ${email.isUnread ? 'text-white font-medium' : 'text-slate-300'}`}>
+                    {email.subject}
+                  </p>
+                  <p className="text-[11px] text-slate-500 line-clamp-2">{email.snippet}</p>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-medium ${
+                      email.category === 'lead' ? 'bg-green-500/20 text-green-400' :
+                      email.category === 'project' ? 'bg-blue-500/20 text-blue-400' :
+                      email.category === 'quotation' ? 'bg-purple-500/20 text-purple-400' :
+                      email.category === 'safety' ? 'bg-red-500/20 text-red-400' :
+                      'bg-slate-700/50 text-slate-400'
+                    }`}>
+                      {email.category}
+                    </span>
+                    {email.hasAttachment && <span className="text-[10px] text-slate-500">📎</span>}
                     <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 text-[9px] font-bold border border-blue-500/30">
                       GMAIL
                     </span>
-                  )}
-                  {email.source === 'demo' && (
-                    <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[9px] font-bold border border-amber-500/30">
-                      DEMO
-                    </span>
-                  )}
-                  {email.hasAttachment && <span className="text-[10px] text-slate-500">📎</span>}
-                  <div className="ml-auto flex items-center gap-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleStar(email.id);
-                      }}
-                      className="text-xs hover:text-amber-400 transition-colors"
-                      aria-label={email.starred ? 'Unstar email' : 'Star email'}
-                    >
-                      {email.starred ? '★' : '☆'}
-                    </button>
-                    {!email.read && (
+                    <div className="ml-auto flex items-center gap-1">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleMarkAsRead(email.id);
+                          handleToggleStar(email.id);
                         }}
-                        className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
-                        aria-label="Mark as read"
+                        className="text-xs hover:text-amber-400 transition-colors"
+                        aria-label={email.labels.includes('STARRED') ? 'Unstar email' : 'Star email'}
                       >
-                        ✓
+                        {email.labels.includes('STARRED') ? '★' : '☆'}
                       </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Email Detail */}
-        <div className="lg:col-span-2 glass-card rounded-xl p-6">
-          {selectedEmail ? (
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-start justify-between mb-3">
-                  <h2 className="text-lg font-bold text-white">{selectedEmail.subject}</h2>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowAIPanel(!showAIPanel)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        showAIPanel
-                          ? 'bg-[#CA9332]/20 text-[#EBC07E] border border-[#CA9332]/30'
-                          : 'bg-slate-700/30 text-slate-400 hover:bg-slate-700/50'
-                      }`}
-                    >
-                      🤖 AI Analysis
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-slate-400">
-                  <span className="font-medium text-white">{selectedEmail.from}</span>
-                  <span>&lt;{selectedEmail.fromEmail}&gt;</span>
-                  <span>•</span>
-                  <span>{new Date(selectedEmail.date).toLocaleString()}</span>
-                </div>
-              </div>
-
-              {/* AI Analysis Panel */}
-              {showAIPanel && (
-                <div className="p-4 rounded-lg bg-[#CA9332]/5 border border-[#CA9332]/20 space-y-3">
-                  <div>
-                    <h4 className="text-xs font-bold text-[#EBC07E] mb-1">🤖 AI Classification</h4>
-                    <p className="text-xs text-white">{selectedEmail.aiClassification}</p>
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-[#EBC07E] mb-1">📋 AI Summary</h4>
-                    <p className="text-xs text-slate-300">{selectedEmail.aiSummary}</p>
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-[#EBC07E] mb-1">💡 Suggested Reply</h4>
-                    <p className="text-xs text-slate-300 italic">{selectedEmail.aiSuggestedReply}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <button className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 text-xs font-medium hover:bg-green-500/30 transition-all">
-                        ✓ Use This Reply
-                      </button>
-                      <button className="px-3 py-1.5 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all">
-                        ✏️ Edit Reply
-                      </button>
+                      {email.isUnread && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkAsRead(email.id);
+                          }}
+                          className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+                          aria-label="Mark as read"
+                        >
+                          ✓
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Email Detail */}
+        <div className="lg:col-span-2 glass-card rounded-xl p-5">
+          {selectedEmail ? (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-white mb-2">{selectedEmail.subject}</h3>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span>From: <span className="text-slate-200">{selectedEmail.from}</span></span>
+                  <span className="text-slate-600">&lt;{selectedEmail.fromEmail}&gt;</span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-1">
+                  <span>{formatDate(selectedEmail.date)}</span>
+                  <span>•</span>
+                  <span>{selectedEmail.labels.join(', ')}</span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/20">
+                <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">{selectedEmail.body}</p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`px-2 py-1 rounded text-[10px] font-medium ${
+                  selectedEmail.category === 'lead' ? 'bg-green-500/20 text-green-400' :
+                  selectedEmail.category === 'project' ? 'bg-blue-500/20 text-blue-400' :
+                  selectedEmail.category === 'quotation' ? 'bg-purple-500/20 text-purple-400' :
+                  selectedEmail.category === 'safety' ? 'bg-red-500/20 text-red-400' :
+                  'bg-slate-700/50 text-slate-400'
+                }`}>
+                  {selectedEmail.category}
+                </span>
+                {selectedEmail.hasAttachment && (
+                  <span className="px-2 py-1 rounded bg-amber-500/20 text-amber-400 text-[10px] font-medium">
+                    📎 {selectedEmail.attachments.length} attachment(s)
+                  </span>
+                )}
+                <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-[10px] font-bold border border-blue-500/30">
+                  GMAIL
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-700/30">
+                <button
+                  onClick={() => setShowAIPanel(!showAIPanel)}
+                  className="px-3 py-1.5 rounded-lg text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors font-medium"
+                  aria-label="Generate AI reply"
+                >
+                  🤖 Generate AI Reply
+                </button>
+                <button
+                  onClick={() => handleMarkAsRead(selectedEmail.id)}
+                  className="px-3 py-1.5 rounded-lg text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors font-medium"
+                  aria-label="Mark as read"
+                >
+                  ✓ Mark Read
+                </button>
+                <button
+                  onClick={() => handleToggleStar(selectedEmail.id)}
+                  className="px-3 py-1.5 rounded-lg text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors font-medium"
+                  aria-label={selectedEmail.labels.includes('STARRED') ? 'Unstar email' : 'Star email'}
+                >
+                  {selectedEmail.labels.includes('STARRED') ? '★ Unstar' : '☆ Star'}
+                </button>
+                {gmailAccount && (
+                  <button
+                    onClick={handleSyncEmails}
+                    disabled={isLoading}
+                    className="px-3 py-1.5 rounded-lg text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-colors font-medium disabled:opacity-50"
+                    aria-label="Refresh emails from Gmail"
+                  >
+                    🔄 Refresh
+                  </button>
+                )}
+              </div>
+
+              {showAIPanel && selectedEmail.aiAnalysis && (
+                <div className="p-4 rounded-xl bg-green-500/5 border border-green-500/20">
+                  <p className="text-[10px] text-green-400 font-medium mb-2">🤖 AI Analysis:</p>
+                  <p className="text-xs text-slate-300 mb-2"><strong>Summary:</strong> {selectedEmail.aiAnalysis.summary}</p>
+                  <p className="text-xs text-slate-300 mb-2"><strong>Sentiment:</strong> {selectedEmail.aiAnalysis.sentiment}</p>
+                  {selectedEmail.aiAnalysis.actionRequired && (
+                    <p className="text-xs text-amber-400 mb-2"><strong>⚠️ Action Required</strong></p>
+                  )}
+                  {selectedEmail.aiAnalysis.suggestedReply && (
+                    <>
+                      <p className="text-[10px] text-green-400 font-medium mb-1 mt-3">💡 Suggested Reply:</p>
+                      <p className="text-xs text-slate-300 italic">"{selectedEmail.aiAnalysis.suggestedReply}"</p>
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            // In a real implementation, this would create a draft reply
+                            orchestrationEngine.addAuditLog(
+                              'user',
+                              'CEO',
+                              'draft_reply_created',
+                              'email',
+                              selectedEmail.id,
+                              `Draft reply created for email from ${selectedEmail.from}`,
+                              'info'
+                            );
+                            alert('Draft reply created. In production, this would open a draft email composer.');
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 hover:bg-green-500/30 transition-colors font-medium"
+                          aria-label="Use suggested reply"
+                        >
+                          ✓ Use This Reply
+                        </button>
+                        <button
+                          onClick={() => setShowAIPanel(false)}
+                          className="px-3 py-1.5 rounded-lg text-[10px] bg-slate-700/30 text-slate-400 border border-slate-600/30 hover:bg-slate-700/50 transition-colors font-medium"
+                          aria-label="Cancel"
+                        >
+                          ✕ Cancel
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
-
-              {/* Email Body */}
-              <div className="p-4 rounded-lg bg-slate-800/30 border border-slate-700/30">
-                <pre className="text-xs text-slate-300 whitespace-pre-wrap font-sans">{selectedEmail.body}</pre>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-2 pt-4 border-t border-slate-700/30">
-                <button className="px-3 py-1.5 rounded-lg bg-[#CA9332]/20 text-[#EBC07E] text-xs font-medium hover:bg-[#CA9332]/30 transition-all">
-                  ↩ Reply
-                </button>
-                <button className="px-3 py-1.5 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all">
-                  → Forward
-                </button>
-                <button className="px-3 py-1.5 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all">
-                  📋 Create Task
-                </button>
-                <button className="px-3 py-1.5 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all">
-                  📁 Archive
-                </button>
-              </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <div className="text-6xl mb-4">📧</div>
-                <h3 className="text-lg font-bold text-white mb-2">Select an Email</h3>
-                <p className="text-xs text-slate-400">Choose an email from the inbox to view details</p>
-              </div>
+            <div className="flex flex-col items-center justify-center h-96 text-center">
+              <span className="text-5xl mb-4">📧</span>
+              <p className="text-sm text-slate-400 mb-2">Select an email to view</p>
+              <p className="text-[10px] text-slate-600">
+                {emails.length === 0 
+                  ? 'No emails available. Click "Sync Now" to fetch emails from Gmail.'
+                  : `Showing ${emails.length} emails from authorized Gmail account`}
+              </p>
             </div>
           )}
         </div>
