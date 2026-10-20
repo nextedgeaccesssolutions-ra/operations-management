@@ -593,7 +593,7 @@ export default function IntegrationsModule() {
             <div className="flex items-center gap-3 pt-6 border-t border-slate-700/30">
               <button
                 onClick={() => handleSaveConfig({
-                  account: 'demo-account',
+                  account: 'info.nextedgeaccesssolutions@gmail.com',
                   scopes: selectedIntegration.permissions.filter(p => p.required).map(p => p.scope)
                 })}
                 className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#CA9332] to-[#EBC07E] text-white text-xs font-medium hover:opacity-90 transition-all"

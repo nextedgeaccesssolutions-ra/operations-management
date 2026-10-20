@@ -41,35 +41,24 @@ export default function GmailAuthorization() {
       const result = await GmailService.startOAuthAuthorization(authorizedEmail);
       
       if (result.success) {
-        setSuccessMessage(`OAuth authorization initiated for ${authorizedEmail}. Please complete the authorization flow in the popup window.`);
+        // BLOCKED: Cannot complete OAuth in frontend-only mode
+        setError(
+          'Gmail OAuth authorization requires backend implementation. ' +
+          'The system cannot complete the OAuth flow without a backend proxy that handles: ' +
+          '(1) Google OAuth 2.0 callback, (2) secure token storage, (3) identity verification via Gmail API. ' +
+          'Please configure the backend Gmail integration before proceeding.'
+        );
         
-        // In a real implementation, this would open a popup for OAuth flow
-        // For now, we'll simulate the completion
-        setTimeout(async () => {
-          try {
-            const oauthCode = 'simulated-oauth-code';
-            const state = 'simulated-state';
-            
-            await GmailService.completeOAuthAuthorization(
-              result.authorizationId,
-              oauthCode,
-              state
-            );
-
-            // Verify the account
-            const verification = await GmailService.verifyRealAccount();
-            
-            if (verification.success) {
-              setSuccessMessage('Gmail account authorized and verified successfully.');
-              await loadGmailData();
-            } else {
-              setError('Account verification failed. Please try again.');
-            }
-          } catch (err) {
-            setError(err instanceof Error ? err.message : 'Authorization failed');
-            console.error('[GmailAuthorization] Authorization failed:', err);
-          }
-        }, 2000);
+        orchestrationEngine.addAuditLog(
+          'user',
+          'CEO',
+          'gmail_authorization_blocked',
+          'integration',
+          'gmail',
+          'OAuth authorization blocked: backend implementation required',
+          'warning',
+          { authorizationId: result.authorizationId }
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start authorization');
@@ -225,10 +214,10 @@ export default function GmailAuthorization() {
           </div>
         ) : (
           <div className="p-4 rounded-lg bg-amber-500/5 border border-amber-500/20 mb-4">
-            <p className="text-xs text-amber-400 font-medium mb-1">⚠️ No Account Authorized</p>
+            <p className="text-xs text-amber-400 font-medium mb-1">⚠️ Backend Configuration Required</p>
             <p className="text-[10px] text-slate-300">
-              Gmail integration requires OAuth 2.0 authorization for info.nextedgeaccesssolutions@gmail.com.
-              Click "Authorize Gmail" to start the authorization flow.
+              Gmail integration requires backend implementation to complete OAuth 2.0 authorization for info.nextedgeaccesssolutions@gmail.com.
+              The frontend cannot complete the OAuth flow without a backend proxy that handles token exchange and secure storage.
             </p>
           </div>
         )}
@@ -288,21 +277,29 @@ export default function GmailAuthorization() {
         {/* Actions */}
         <div className="flex items-center gap-3 flex-wrap">
           {!account ? (
-            <button
-              onClick={handleStartAuthorization}
-              disabled={isLoading}
-              className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#CA9332] to-[#EBC07E] text-white text-xs font-medium hover:opacity-90 transition-all disabled:opacity-50"
-              aria-label="Authorize Gmail account"
-            >
-              {isLoading ? '⏳ Authorizing...' : '🔐 Authorize Gmail'}
-            </button>
+            <div className="w-full p-4 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <p className="text-xs text-amber-400 font-medium mb-2">⚠️ Backend Implementation Required</p>
+              <p className="text-[10px] text-slate-300 mb-3">
+                Gmail OAuth authorization cannot be completed in frontend-only mode. The system requires:
+              </p>
+              <ul className="text-[10px] text-slate-400 space-y-1 mb-3">
+                <li>• Backend proxy endpoint for Google OAuth 2.0 callback</li>
+                <li>• Secure server-side token storage (never in localStorage)</li>
+                <li>• Gmail API integration for identity verification</li>
+                <li>• State/CSRF protection implementation</li>
+              </ul>
+              <p className="text-[10px] text-slate-500">
+                Current status: <span className="text-amber-400 font-medium">Awaiting Backend Configuration</span>
+              </p>
+            </div>
           ) : (
             <>
               <button
                 onClick={handleSync}
-                disabled={isLoading || syncState?.status === 'syncing'}
+                disabled={isLoading || syncState?.status === 'syncing' || health?.status !== 'healthy'}
                 className="px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 text-xs font-medium hover:bg-blue-500/30 transition-all disabled:opacity-50"
                 aria-label="Sync emails from Gmail"
+                title={health?.status !== 'healthy' ? 'Connection not healthy' : ''}
               >
                 {isLoading ? '⏳ Syncing...' : '🔄 Sync Now'}
               </button>

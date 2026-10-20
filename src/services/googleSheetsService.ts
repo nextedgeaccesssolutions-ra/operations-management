@@ -83,8 +83,8 @@ export class GoogleSheetsService {
       if (!this.isInitialized) {
         const initialized = await this.initialize();
         if (!initialized) {
-          console.warn('[GoogleSheetsService] Using mock data - API not available');
-          return this.getMockData(range);
+          console.warn('[GoogleSheetsService] Using sample data - API not available');
+          return this.getSampleData(range);
         }
       }
 
@@ -99,16 +99,16 @@ export class GoogleSheetsService {
       };
     } catch (error) {
       console.error('[GoogleSheetsService] Failed to read sheet:', error);
-      // Return mock data as fallback
-      return this.getMockData(range);
+      // Return sample data as fallback
+      return this.getSampleData(range);
     }
   }
 
   /**
-   * Get mock data for development/testing
+   * Get sample data for development/testing (backend not connected)
    */
-  private static getMockData(range: string): SheetData {
-    // Provide realistic mock data based on range
+  private static getSampleData(range: string): SheetData {
+    // Provide realistic sample data based on range
     if (range.includes('Employees') || range.includes('HR')) {
       return {
         range,

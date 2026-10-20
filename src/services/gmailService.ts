@@ -248,57 +248,41 @@ export async function startOAuthAuthorization(targetEmail: string): Promise<{
 
 /**
  * Complete OAuth authorization for real account
- * STATUS: Adapter contract - requires backend implementation
+ * STATUS: Requires backend implementation - cannot complete in frontend-only mode
  */
 export async function completeOAuthAuthorization(
   authorizationId: string,
   oauthCode: string,
   state: string
 ): Promise<GmailAccount> {
-  // TODO: Implement actual OAuth flow with backend
-  // This requires:
+  // BLOCKED: This function requires backend implementation
+  // Cannot complete OAuth flow without:
   // 1. Backend endpoint to exchange code for tokens
   // 2. Secure token storage (server-side only)
-  // 3. Account identity verification
+  // 3. Account identity verification via Gmail API
   // 4. State/CSRF validation
   
-  // For now, simulate successful authorization
-  const newAccount: GmailAccount = {
-    id: `real-account-${Date.now()}`,
-    email: 'info.nextedgeaccesssolutions@gmail.com',
-    displayName: 'NEAS Company Email',
-    authorizedAt: new Date(),
-    grantedScopes: ['gmail.readonly'],
-    connectionState: 'authorized'
-  };
-
-  // Verify account identity matches authorized mailbox
-  if (newAccount.email !== 'info.nextedgeaccesssolutions@gmail.com') {
-    throw new Error('Account identity verification failed');
-  }
-
-  // Log authorization
   orchestrationEngine.addAuditLog(
     'system',
     'gmail-service',
-    'oauth_completed',
+    'oauth_blocked',
     'integration',
     'gmail',
-    `OAuth authorization completed for ${newAccount.email}`,
-    'info',
-    { authorizationId, accountId: newAccount.id }
+    'OAuth completion blocked: backend implementation required',
+    'error',
+    { authorizationId, reason: 'backend_required' }
   );
 
-  // Update current account
-  currentAccount = newAccount;
-  syncState.connectionState = 'authorized';
-
-  return newAccount;
+  throw new Error(
+    'Gmail OAuth authorization requires backend implementation. ' +
+    'Cannot complete OAuth flow in frontend-only mode. ' +
+    'Please configure backend proxy with Gmail API credentials.'
+  );
 }
 
 /**
  * Verify real account with health checks
- * STATUS: Implements verification flow
+ * STATUS: Blocked - requires backend Gmail API integration
  */
 export async function verifyRealAccount(): Promise<{
   success: boolean;
@@ -312,50 +296,31 @@ export async function verifyRealAccount(): Promise<{
     throw new Error('No account authorized. Please complete OAuth authorization first.');
   }
 
-  // Run health check
+  // BLOCKED: Cannot verify account without backend Gmail API access
+  // All verification tests require actual Gmail API calls
+  
   const healthCheck = await checkConnectionHealth();
 
-  // TODO: Implement actual verification tests
-  // For now, simulate successful verification
-  
-  const verification = {
-    success: healthCheck.status === 'healthy',
+  orchestrationEngine.addAuditLog(
+    'system',
+    'gmail-service',
+    'verification_blocked',
+    'integration',
+    'gmail',
+    'Account verification blocked: backend Gmail API integration required',
+    'warning',
+    { accountId: currentAccount.id }
+  );
+
+  // Return truthful state - verification cannot succeed without backend
+  return {
+    success: false,
     healthCheck,
-    mailboxCheck: true, // TODO: Actual mailbox metadata check
-    paginationTest: true, // TODO: Actual pagination test
-    rateLimitTest: true, // TODO: Actual rate limit test
-    safeImport: true // TODO: Actual small safe import
+    mailboxCheck: false,
+    paginationTest: false,
+    rateLimitTest: false,
+    safeImport: false
   };
-
-  if (verification.success) {
-    currentAccount.connectionState = 'healthy';
-    syncState.connectionState = 'healthy';
-
-    orchestrationEngine.addAuditLog(
-      'system',
-      'gmail-service',
-      'account_verified',
-      'integration',
-      'gmail',
-      `Real account ${currentAccount.email} verified successfully`,
-      'info'
-    );
-  } else {
-    currentAccount.connectionState = 'degraded';
-    syncState.connectionState = 'degraded';
-
-    orchestrationEngine.addAuditLog(
-      'system',
-      'gmail-service',
-      'account_verification_failed',
-      'integration',
-      'gmail',
-      `Real account verification failed: ${healthCheck.errorMessage}`,
-      'error'
-    );
-  }
-
-  return verification;
 }
 
 /**

@@ -12,7 +12,7 @@
  * 
  * Current implementation provides:
  * - Interface contracts for all Refrens operations
- * - Mock data for development and testing
+ * - Sample data for development and testing (clearly labeled)
  * - Connection health monitoring
  * - Sync state management
  * - Error handling and retry logic
@@ -231,7 +231,7 @@ export async function disconnect(): Promise<void> {
 
 /**
  * Sync clients from Refrens
- * STATUS: Returns mock data for development
+ * STATUS: Returns sample data for development (backend not connected)
  */
 export async function syncClients(): Promise<RefrensClient[]> {
   if (syncState.connectionStatus !== 'connected') {
@@ -245,8 +245,8 @@ export async function syncClients(): Promise<RefrensClient[]> {
     // const response = await fetch('/api/refrens/clients', { ... });
     // const refrensClients = await response.json();
     
-    // Mock data for development
-    const mockClients: RefrensClient[] = [
+    // Sample data for development (backend not connected)
+    const sampleClients: RefrensClient[] = [
       {
         id: 'refrens-client-1',
         sourceSystem: 'refrens',
@@ -272,7 +272,7 @@ export async function syncClients(): Promise<RefrensClient[]> {
     ];
     
     // Idempotent upsert - prevent duplicates
-    mockClients.forEach(newClient => {
+    sampleClients.forEach((newClient: RefrensClient) => {
       const existingIndex = clients.findIndex(c => c.sourceRecordId === newClient.sourceRecordId);
       if (existingIndex >= 0) {
         clients[existingIndex] = { ...clients[existingIndex], ...newClient, lastSyncedAt: new Date() };
@@ -292,7 +292,7 @@ export async function syncClients(): Promise<RefrensClient[]> {
       'sync_clients',
       'integration',
       'refrens',
-      `Synced ${mockClients.length} clients from Refrens`,
+      `Synced ${sampleClients.length} clients from Refrens (sample data)`,
       'info'
     );
     
@@ -318,7 +318,7 @@ export async function syncClients(): Promise<RefrensClient[]> {
 
 /**
  * Sync quotations from Refrens
- * STATUS: Returns mock data for development
+ * STATUS: Returns sample data for development (backend not connected)
  */
 export async function syncQuotations(): Promise<RefrensQuotation[]> {
   if (syncState.connectionStatus !== 'connected') {
@@ -332,8 +332,8 @@ export async function syncQuotations(): Promise<RefrensQuotation[]> {
     // const response = await fetch('/api/refrens/quotations', { ... });
     // const refrensQuotations = await response.json();
     
-    // Mock data for development
-    const mockQuotations: RefrensQuotation[] = [
+    // Sample data for development (backend not connected)
+    const sampleQuotations: RefrensQuotation[] = [
       {
         id: 'refrens-quote-1',
         sourceSystem: 'refrens',
@@ -367,7 +367,7 @@ export async function syncQuotations(): Promise<RefrensQuotation[]> {
     ];
     
     // Idempotent upsert
-    mockQuotations.forEach(newQuote => {
+    sampleQuotations.forEach((newQuote: RefrensQuotation) => {
       const existingIndex = quotations.findIndex(q => q.sourceRecordId === newQuote.sourceRecordId);
       if (existingIndex >= 0) {
         quotations[existingIndex] = { ...quotations[existingIndex], ...newQuote, lastSyncedAt: new Date() };
@@ -387,7 +387,7 @@ export async function syncQuotations(): Promise<RefrensQuotation[]> {
       'sync_quotations',
       'integration',
       'refrens',
-      `Synced ${mockQuotations.length} quotations from Refrens`,
+      `Synced ${sampleQuotations.length} quotations from Refrens (sample data)`,
       'info'
     );
     
@@ -402,7 +402,7 @@ export async function syncQuotations(): Promise<RefrensQuotation[]> {
 
 /**
  * Sync invoices from Refrens
- * STATUS: Returns mock data for development
+ * STATUS: Returns sample data for development (backend not connected)
  */
 export async function syncInvoices(): Promise<RefrensInvoice[]> {
   if (syncState.connectionStatus !== 'connected') {
@@ -416,8 +416,8 @@ export async function syncInvoices(): Promise<RefrensInvoice[]> {
     // const response = await fetch('/api/refrens/invoices', { ... });
     // const refrensInvoices = await response.json();
     
-    // Mock data for development
-    const mockInvoices: RefrensInvoice[] = [
+    // Sample data for development (backend not connected)
+    const sampleInvoices: RefrensInvoice[] = [
       {
         id: 'refrens-invoice-1',
         sourceSystem: 'refrens',
@@ -455,7 +455,7 @@ export async function syncInvoices(): Promise<RefrensInvoice[]> {
     ];
     
     // Idempotent upsert
-    mockInvoices.forEach(newInvoice => {
+    sampleInvoices.forEach((newInvoice: RefrensInvoice) => {
       const existingIndex = invoices.findIndex(i => i.sourceRecordId === newInvoice.sourceRecordId);
       if (existingIndex >= 0) {
         invoices[existingIndex] = { ...invoices[existingIndex], ...newInvoice, lastSyncedAt: new Date() };
@@ -475,7 +475,7 @@ export async function syncInvoices(): Promise<RefrensInvoice[]> {
       'sync_invoices',
       'integration',
       'refrens',
-      `Synced ${mockInvoices.length} invoices from Refrens`,
+      `Synced ${sampleInvoices.length} invoices from Refrens (sample data)`,
       'info'
     );
     
