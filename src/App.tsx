@@ -4,6 +4,9 @@ import { orchestrationEngine } from './neas/orchestrationEngine';
 import PersistenceService from './services/persistenceService';
 import ErrorBoundary from './components/ErrorBoundary';
 import ExecutiveCommandCenter from './components/ExecutiveCommandCenter';
+import EnterpriseCommandCenter from './components/EnterpriseCommandCenter';
+import SystemHealthMonitor from './components/SystemHealthMonitor';
+import FinancialControlCenter from './components/FinancialControlCenter';
 import AIStaffDirectory from './components/AIStaffDirectory';
 import AgentTaskMonitor from './components/AgentTaskMonitor';
 import EmailCenter from './components/EmailCenter';
@@ -27,6 +30,9 @@ import AuditModule from './components/AuditModule';
 
 type ViewType = 
   | 'executive'
+  | 'enterprise'
+  | 'health'
+  | 'financial-control'
   | 'workforce'
   | 'assistant'
   | 'knowledge'
@@ -112,6 +118,9 @@ export default function App() {
 
   const navigationItems = [
     { id: 'executive' as ViewType, icon: '👔', label: 'Executive Center', badge: orchestrationEngine.getPendingApprovals().length },
+    { id: 'enterprise' as ViewType, icon: '🏛️', label: 'Enterprise Command' },
+    { id: 'health' as ViewType, icon: '🔍', label: 'System Health' },
+    { id: 'financial-control' as ViewType, icon: '💹', label: 'Financial Control' },
     { id: 'workforce' as ViewType, icon: '🎛️', label: 'Workforce Control' },
     { id: 'assistant' as ViewType, icon: '💬', label: 'AI Assistant' },
     { id: 'knowledge' as ViewType, icon: '📚', label: 'Knowledge Base' },
@@ -138,6 +147,12 @@ export default function App() {
     switch (currentView) {
       case 'executive':
         return <ExecutiveCommandCenter />;
+      case 'enterprise':
+        return <EnterpriseCommandCenter />;
+      case 'health':
+        return <SystemHealthMonitor />;
+      case 'financial-control':
+        return <FinancialControlCenter />;
       case 'workforce':
         return <LiveWorkforceControlCenter />;
       case 'assistant':
@@ -261,6 +276,9 @@ export default function App() {
               </h2>
               <p className="text-xs text-slate-400">
                 {currentView === 'executive' && 'Strategic overview and executive decision support'}
+                {currentView === 'enterprise' && 'Centralized operational command center for executives'}
+                {currentView === 'health' && 'Real-time system health monitoring and self-recovery'}
+                {currentView === 'financial-control' && 'Comprehensive financial analysis and control'}
                 {currentView === 'workforce' && 'Real-time AI workforce monitoring and control'}
                 {currentView === 'assistant' && 'Conversational AI command interface'}
                 {currentView === 'knowledge' && 'Company document and knowledge management'}

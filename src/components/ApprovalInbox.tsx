@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { orchestrationEngine, type ApprovalRequest, type ApprovalLevel } from '../neas/orchestrationEngine';
 import { getAgentById } from '../neas/agentRegistry';
+import PersistenceService from '../services/persistenceService';
 
 export default function ApprovalInbox() {
   const [selectedApproval, setSelectedApproval] = useState<ApprovalRequest | null>(null);
@@ -8,9 +9,25 @@ export default function ApprovalInbox() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [showDecisionModal, setShowDecisionModal] = useState(false);
   const [decisionNotes, setDecisionNotes] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
 
   const allApprovals = orchestrationEngine.getAllApprovals();
   
+  // Load approvals from persistence on mount
+  useEffect(() => {
+    const savedApprovals = PersistenceService.loadModuleData<ApprovalRequest[]>('approvals', []);
+    if (savedApprovals.length > 0) {
+      // Merge with existing approvals
+      savedApprovals.forEach(saved => {
+        const existing = allApprovals.find(a => a.id === saved.id);
+        if (!existing) {
+          // This would need a method to add approvals to the engine
+          console.log('[ApprovalInbox] Found saved approval:', saved.id);
+        }
+      });
+    }
+  }, []);
+
   const filteredApprovals = allApprovals.filter(approval => {
     if (filterLevel !== 'all' && approval.approvalLevel !== filterLevel) return false;
     if (filterStatus !== 'all' && approval.status !== filterStatus) return false;
