@@ -63,6 +63,8 @@ export interface ApprovalRequest {
   decisionNotes?: string;
   actionDescription: string;
   impact: string;
+  financialImpact?: string;
+  riskLevel?: 'low' | 'medium' | 'high' | 'critical';
   evidence: string[];
 }
 

@@ -438,6 +438,22 @@ export default function ProjectsModule() {
               <div>
                 <h2 className="text-xl font-bold text-white">{selectedProject.name}</h2>
                 <p className="text-sm text-slate-400 mt-1">{selectedProject.client} • {selectedProject.location}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className={`px-2 py-1 rounded text-[10px] font-bold border ${getStatusColor(selectedProject.status)}`}>
+                    {selectedProject.status.toUpperCase()}
+                  </span>
+                  <select
+                    value={selectedProject.status}
+                    onChange={(e) => handleUpdateStatus(selectedProject.id, e.target.value as Project['status'])}
+                    className="px-2 py-1 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white focus:outline-none focus:border-[#CA9332]/50"
+                    aria-label="Update project status"
+                  >
+                    <option value="planning">Planning</option>
+                    <option value="active">Active</option>
+                    <option value="on-hold">On Hold</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
               </div>
               <button 
                 onClick={() => setSelectedProject(null)} 
@@ -478,6 +494,20 @@ export default function ProjectsModule() {
                 </div>
                 <span className="text-lg font-bold text-white">{selectedProject.progress}%</span>
               </div>
+              <div className="mt-3 flex items-center gap-2">
+                <label htmlFor="progress-input" className="text-xs text-slate-400">Update:</label>
+                <input
+                  id="progress-input"
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={selectedProject.progress}
+                  onChange={(e) => handleUpdateProgress(selectedProject.id, parseInt(e.target.value))}
+                  className="flex-1 accent-[#CA9332]"
+                  aria-label="Update project progress percentage"
+                />
+                <span className="text-xs text-slate-400 w-12 text-right">{selectedProject.progress}%</span>
+              </div>
             </div>
 
             <div className="mb-6">
@@ -485,11 +515,16 @@ export default function ProjectsModule() {
               <div className="space-y-2">
                 {selectedProject.milestones.map((milestone, i) => (
                   <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                      milestone.completed ? 'bg-green-500/20 text-green-400' : 'bg-slate-700/50 text-slate-500'
-                    }`}>
+                    <button
+                      onClick={() => handleToggleMilestone(selectedProject.id, i)}
+                      className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                        milestone.completed ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-slate-700/50 text-slate-500 hover:bg-slate-700/70'
+                      }`}
+                      aria-label={`Toggle milestone: ${milestone.name}`}
+                      aria-pressed={milestone.completed}
+                    >
                       {milestone.completed ? '✓' : '○'}
-                    </div>
+                    </button>
                     <div className="flex-1">
                       <p className="text-xs font-semibold text-white">{milestone.name}</p>
                       <p className="text-[10px] text-slate-500">{new Date(milestone.date).toLocaleDateString()}</p>
