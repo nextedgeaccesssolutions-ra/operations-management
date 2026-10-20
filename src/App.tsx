@@ -28,6 +28,7 @@ import IntegrationsModule from './components/IntegrationsModule';
 import UsersModule from './components/UsersModule';
 import AuditModule from './components/AuditModule';
 import RefrensIntegration from './components/RefrensIntegration';
+import GmailMigration from './components/GmailMigration';
 
 type ViewType = 
   | 'executive'
@@ -35,6 +36,7 @@ type ViewType =
   | 'health'
   | 'financial-control'
   | 'refrens'
+  | 'gmail-migration'
   | 'workforce'
   | 'assistant'
   | 'knowledge'
@@ -124,6 +126,7 @@ export default function App() {
     { id: 'health' as ViewType, icon: '🔍', label: 'System Health' },
     { id: 'financial-control' as ViewType, icon: '💹', label: 'Financial Control' },
     { id: 'refrens' as ViewType, icon: '📑', label: 'Refrens Integration' },
+    { id: 'gmail-migration' as ViewType, icon: '📧', label: 'Gmail Migration' },
     { id: 'workforce' as ViewType, icon: '🎛️', label: 'Workforce Control' },
     { id: 'assistant' as ViewType, icon: '💬', label: 'AI Assistant' },
     { id: 'knowledge' as ViewType, icon: '📚', label: 'Knowledge Base' },
@@ -158,6 +161,8 @@ export default function App() {
         return <FinancialControlCenter />;
       case 'refrens':
         return <RefrensIntegration />;
+      case 'gmail-migration':
+        return <GmailMigration />;
       case 'workforce':
         return <LiveWorkforceControlCenter />;
       case 'assistant':
@@ -285,6 +290,7 @@ export default function App() {
                 {currentView === 'health' && 'Real-time system health monitoring and self-recovery'}
                 {currentView === 'financial-control' && 'Comprehensive financial analysis and control'}
                 {currentView === 'refrens' && 'Refrens quotation and invoice synchronization'}
+                {currentView === 'gmail-migration' && 'Gmail account migration and email synchronization'}
                 {currentView === 'workforce' && 'Real-time AI workforce monitoring and control'}
                 {currentView === 'assistant' && 'Conversational AI command interface'}
                 {currentView === 'knowledge' && 'Company document and knowledge management'}
