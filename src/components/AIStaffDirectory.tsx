@@ -1,11 +1,23 @@
-import { useState } from 'react';
-import { agents, getAgentById, type Agent, type Department } from '../neas/agentRegistry';
+import { useMemo, useState } from 'react';
+import { getAgentById, type Agent, type Department } from '../neas/agentRegistry';
 import { orchestrationEngine } from '../neas/orchestrationEngine';
+import { hasRunHistory, isCustom, rosterFor } from '../neas/customAgents';
+import { useAuth } from '../AuthContext';
+import AgentBuilder from './AgentBuilder';
 
 export default function AIStaffDirectory() {
+  const { account } = useAuth();
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [filterDepartment, setFilterDepartment] = useState<Department | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  // Bumped when the company adds or removes an agent of its own.
+  const [rev, setRev] = useState(0);
+
+  // The company's own agents first, then the reference roster.
+  const agents = useMemo(
+    () => (account ? rosterFor(account.companyKey) : []),
+    [account, rev]
+  );
 
   const filteredAgents = agents.filter(agent => {
     if (filterDepartment !== 'all' && agent.department !== filterDepartment) return false;
@@ -20,6 +32,8 @@ export default function AIStaffDirectory() {
 
   return (
     <div className="space-y-6">
+      <AgentBuilder onChanged={() => setRev((r) => r + 1)} />
+
       {/* Filters */}
       <div className="glass-card rounded-xl p-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -54,6 +68,11 @@ export default function AIStaffDirectory() {
             Showing {filteredAgents.length} of {agents.length} agents
           </div>
         </div>
+        <p className="text-[10px] text-slate-500 mt-3 leading-relaxed">
+          Completed-task counts and success rates on the shipped reference agents are sample
+          figures compiled into the build, not measured runs. Agents you create start with no
+          history and show none until they have actually run.
+        </p>
       </div>
 
       {/* Agent Grid */}
@@ -68,8 +87,15 @@ export default function AIStaffDirectory() {
             >
               <div className="flex items-start gap-3 mb-4">
                 <div className="text-4xl">{agent.avatar}</div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-bold text-white">{agent.name}</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-bold text-white">{agent.name}</h3>
+                    {isCustom(agent) && (
+                      <span className="px-1.5 py-0.5 rounded bg-[#CA9332]/20 border border-[#CA9332]/35 text-[9px] font-bold text-[#EBC07E] uppercase tracking-wider">
+                        Yours
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-[#EBC07E]">{agent.title}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <span className={`w-2 h-2 rounded-full ${
@@ -95,8 +121,14 @@ export default function AIStaffDirectory() {
                   <p className="text-[10px] text-slate-500">Completed</p>
                 </div>
                 <div className="text-center p-2 rounded-lg bg-slate-800/30">
-                  <p className="text-lg font-bold text-[#EBC07E]">{agent.successRate}%</p>
-                  <p className="text-[10px] text-slate-500">Success</p>
+                  {/* A new agent has no success rate. Showing 0% would read as
+                      a measured failure rather than an absence of runs. */}
+                  <p className="text-lg font-bold text-[#EBC07E]">
+                    {hasRunHistory(agent) ? `${agent.successRate}%` : '—'}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    {hasRunHistory(agent) ? 'Success' : 'No runs'}
+                  </p>
                 </div>
               </div>
 

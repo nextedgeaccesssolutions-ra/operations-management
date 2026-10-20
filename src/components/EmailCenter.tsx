@@ -1,4 +1,14 @@
 import { useState } from 'react';
+import {
+  fetchEmails,
+  getUserEmail,
+  initializeGapi,
+  initializeGis,
+  isAuthenticated,
+  isClientIdConfigured,
+  requestToken,
+  type Email as GmailEmail,
+} from '../services/googleApi';
 
 interface Email {
   id: string;
@@ -106,69 +116,188 @@ const mockEmails: Email[] = [
   }
 ];
 
+/** A real Gmail message, flattened into the shape this screen renders. */
+function fromGmail(m: GmailEmail): Email {
+  return {
+    id: m.id,
+    from: m.from,
+    fromEmail: m.fromEmail,
+    subject: m.subject,
+    preview: m.snippet,
+    body: m.body,
+    date: m.date,
+    // There is no classifier running, so a real message is not given a
+    // category, a priority or an AI summary. Inventing them here is exactly
+    // what made the sample data misleading in the first place.
+    category: 'Unclassified',
+    priority: 'normal',
+    read: !m.unread,
+    starred: false,
+    hasAttachment: false,
+  };
+}
+
 export default function EmailCenter() {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAIPanel, setShowAIPanel] = useState(false);
 
+  const [connected, setConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState('');
+  const [mailbox, setMailbox] = useState('');
+  const [liveEmails, setLiveEmails] = useState<Email[]>([]);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+
+  const configured = isClientIdConfigured();
+
+  const connect = async () => {
+    setConnecting(true);
+    setConnectError('');
+    try {
+      await initializeGapi();
+      await initializeGis();
+      await requestToken();
+      if (!isAuthenticated()) throw new Error('Authorization did not complete.');
+      const [address, messages] = await Promise.all([getUserEmail(), fetchEmails(50)]);
+      setMailbox(address);
+      setLiveEmails(messages.map(fromGmail));
+      setLastSync(new Date());
+      setConnected(true);
+    } catch (e) {
+      setConnectError(e instanceof Error ? e.message : String(e));
+      setConnected(false);
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const sync = async () => {
+    setConnecting(true);
+    setConnectError('');
+    try {
+      const messages = await fetchEmails(50);
+      setLiveEmails(messages.map(fromGmail));
+      setLastSync(new Date());
+    } catch (e) {
+      setConnectError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  // Sample data is only ever shown while nothing is connected, and it is
+  // labelled as sample wherever it appears.
+  const source = connected ? liveEmails : mockEmails;
+
   const categories = ['all', 'New Lead', 'Active Project', 'Procurement', 'Safety Incident', 'Billing'];
 
-  const filteredEmails = mockEmails.filter(email => {
+  const filteredEmails = source.filter(email => {
     if (filterCategory !== 'all' && email.category !== filterCategory) return false;
-    if (searchQuery && !email.subject.toLowerCase().includes(searchQuery.toLowerCase()) && 
+    if (searchQuery && !email.subject.toLowerCase().includes(searchQuery.toLowerCase()) &&
         !email.from.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
-  const unreadCount = mockEmails.filter(e => !e.read).length;
+  const unreadCount = source.filter(e => !e.read).length;
 
   return (
     <div className="space-y-6">
-      {/* Connection Status */}
-      <div className="glass-card rounded-xl p-4 border border-[#CA9332]/20">
-        <div className="flex items-center justify-between">
+      {/* Connection Status — reported, never asserted */}
+      <div
+        className={`glass-card rounded-xl p-4 border ${
+          connected ? 'border-green-500/30' : 'border-amber-500/30'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-              <span className="text-xl">📧</span>
+            <div
+              className={`w-10 h-10 rounded-lg flex items-center justify-center border ${
+                connected
+                  ? 'bg-green-500/10 border-green-500/25'
+                  : 'bg-amber-500/10 border-amber-500/25'
+              }`}
+            >
+              <span className="text-xl" aria-hidden>📧</span>
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-white">Gmail Integration</h3>
-              <p className="text-[10px] text-slate-400">company.info.nextedgeaccesssolutions@gmail.com</p>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-white">
+                {connected ? 'Gmail connected' : 'Gmail not connected'}
+              </h3>
+              <p className="text-[10px] text-slate-400 break-words">
+                {connected
+                  ? mailbox
+                  : configured
+                  ? 'No mailbox has been authorized in this browser yet.'
+                  : 'VITE_GOOGLE_CLIENT_ID is not set in this deployment, so authorization cannot start.'}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-xs text-slate-400">Last Sync</p>
-              <p className="text-[10px] text-green-400">2 minutes ago</p>
-            </div>
-            <button className="px-3 py-1.5 rounded-lg bg-[#CA9332]/20 text-[#EBC07E] text-xs font-medium hover:bg-[#CA9332]/30 transition-all">
-              Sync Now
+            {connected && (
+              <div className="text-right">
+                <p className="text-xs text-slate-400">Last sync</p>
+                <p className="text-[10px] text-green-400">
+                  {lastSync ? lastSync.toLocaleTimeString() : '—'}
+                </p>
+              </div>
+            )}
+            <button
+              onClick={connected ? sync : connect}
+              disabled={!configured || connecting}
+              className="px-3 py-1.5 rounded-lg bg-[#CA9332]/20 text-[#EBC07E] text-xs font-medium hover:bg-[#CA9332]/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {connecting ? 'Working…' : connected ? 'Sync now' : 'Connect Gmail'}
             </button>
           </div>
         </div>
+
+        {connectError && (
+          <p role="alert" className="mt-3 p-2.5 rounded-lg bg-red-500/10 border border-red-500/25 text-red-300 text-xs">
+            {connectError}
+          </p>
+        )}
+
+        {!connected && (
+          <p className="mt-3 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs leading-relaxed">
+            <strong>The messages below are sample data, not your inbox.</strong>{' '}
+            {configured
+              ? 'Connect a mailbox to replace them with real mail.'
+              : 'Set VITE_GOOGLE_CLIENT_ID in the deployment environment, then connect a mailbox to replace them with real mail.'}
+          </p>
+        )}
+
+        {connected && (
+          <p className="mt-3 p-2.5 rounded-lg bg-[#071D29]/60 border border-[#CA9332]/20 text-slate-400 text-xs leading-relaxed">
+            Read-only. Lead detection, urgency and thread summaries are not implemented, so real
+            messages stay unclassified and those counters read zero. Nothing is sent from here.
+          </p>
+        )}
       </div>
 
       {/* Email Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="glass-card rounded-xl p-4">
-          <p className="text-2xl font-bold text-white">{mockEmails.length}</p>
-          <p className="text-xs text-slate-400">Total Emails</p>
+          <p className="text-2xl font-bold text-white">{source.length}</p>
+          <p className="text-xs text-slate-400">
+            {connected ? 'Messages' : 'Sample messages'}
+          </p>
         </div>
         <div className="glass-card rounded-xl p-4">
           <p className="text-2xl font-bold text-blue-400">{unreadCount}</p>
           <p className="text-xs text-slate-400">Unread</p>
         </div>
         <div className="glass-card rounded-xl p-4">
-          <p className="text-2xl font-bold text-green-400">{mockEmails.filter(e => e.category === 'New Lead').length}</p>
+          <p className="text-2xl font-bold text-green-400">{source.filter(e => e.category === 'New Lead').length}</p>
           <p className="text-xs text-slate-400">New Leads</p>
         </div>
         <div className="glass-card rounded-xl p-4">
-          <p className="text-2xl font-bold text-red-400">{mockEmails.filter(e => e.priority === 'urgent').length}</p>
+          <p className="text-2xl font-bold text-red-400">{source.filter(e => e.priority === 'urgent').length}</p>
           <p className="text-xs text-slate-400">Urgent</p>
         </div>
         <div className="glass-card rounded-xl p-4">
-          <p className="text-2xl font-bold text-amber-400">{mockEmails.filter(e => e.hasAttachment).length}</p>
+          <p className="text-2xl font-bold text-amber-400">{source.filter(e => e.hasAttachment).length}</p>
           <p className="text-xs text-slate-400">With Attachments</p>
         </div>
       </div>

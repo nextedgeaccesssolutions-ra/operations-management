@@ -265,7 +265,208 @@
 }
 
 .hero-overlay-grid {
-  background-image: 
+  background-image:
     radial-gradient(circle at 25% 25%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
     radial-gradient(circle at 75% 75%, rgba(139, 92, 246, 0.08) 0%, transparent 50%);
+}
+
+/* ── the drawn office floor (components/OfficeFloor.tsx) ──────────── */
+
+.of-wrap {
+  background: #071d29;
+  border: 1px solid rgba(202, 147, 50, 0.22);
+  border-radius: 16px;
+  padding: 10px;
+  overflow-x: auto;
+}
+
+.of-floor {
+  display: block;
+  width: 100%;
+  min-width: 760px;
+  height: auto;
+  border-radius: 12px;
+}
+
+.of-floor text {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.of-zone {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  fill: rgba(235, 192, 126, 0.55);
+  text-anchor: middle;
+}
+
+.of-tv-label {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  fill: rgba(235, 192, 126, 0.75);
+  text-anchor: middle;
+}
+
+.of-tv-value {
+  font-size: 34px;
+  font-weight: 800;
+  fill: #ffffff;
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.of-name {
+  font-size: 13px;
+  font-weight: 800;
+  fill: #ffffff;
+  text-anchor: middle;
+}
+
+.of-role {
+  font-size: 10.5px;
+  fill: rgba(235, 192, 126, 0.6);
+  text-anchor: middle;
+}
+
+.of-cap {
+  font-size: 11px;
+  fill: rgba(148, 170, 182, 0.85);
+  text-anchor: middle;
+}
+
+.of-cap-end {
+  font-size: 11px;
+  fill: rgba(148, 170, 182, 0.7);
+  text-anchor: end;
+}
+
+.of-signoff {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  fill: #ca9332;
+  text-anchor: middle;
+}
+
+/* Animating transforms on SVG children needs an explicit box, or the origin
+   resolves against the whole viewport and things fly off the canvas. */
+.of-floor .of-bob,
+.of-floor .of-say,
+.of-floor .of-line,
+.of-floor .of-type-l,
+.of-floor .of-type-r,
+.of-floor .of-sway,
+.of-floor .of-sun,
+.of-floor .of-beacon,
+.of-floor .of-screen,
+.of-floor .of-nudge,
+.of-floor .of-bird {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes of-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2.5px); }
+}
+
+@keyframes of-type-l {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes of-type-r {
+  0%, 100% { transform: translateY(-3px); }
+  50% { transform: translateY(0); }
+}
+
+@keyframes of-line {
+  0%, 100% { transform: scaleX(0.5); opacity: 0.55; }
+  50% { transform: scaleX(1); opacity: 1; }
+}
+
+/* One speaks, then the other: two bubbles share this cycle with opposite
+   delays, which is what makes a pair read as a conversation. */
+@keyframes of-say {
+  0%, 6% { opacity: 0; transform: translateY(5px) scale(0.94); }
+  14%, 44% { opacity: 1; transform: translateY(0) scale(1); }
+  54%, 100% { opacity: 0; transform: translateY(-3px) scale(0.97); }
+}
+
+@keyframes of-cloud {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(420px); }
+}
+
+@keyframes of-sway {
+  0%, 100% { transform: rotate(-1.6deg); }
+  50% { transform: rotate(1.6deg); }
+}
+
+@keyframes of-sun {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; }
+}
+
+@keyframes of-beacon {
+  0%, 46% { opacity: 1; }
+  50%, 100% { opacity: 0.15; }
+}
+
+@keyframes of-screen {
+  0%, 100% { opacity: 0.04; }
+  50% { opacity: 0.1; }
+}
+
+@keyframes of-nudge {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(5px); }
+}
+
+@keyframes of-doc {
+  0% { transform: translateX(0); opacity: 0; }
+  10% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { transform: translateX(880px); opacity: 0; }
+}
+
+@keyframes of-walk {
+  0% { transform: translateX(0); }
+  46% { transform: translateX(170px); }
+  50% { transform: translateX(170px); }
+  96% { transform: translateX(0); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes of-bird {
+  0% { transform: translate(0, 0); opacity: 0; }
+  12% { opacity: 0.8; }
+  80% { opacity: 0.8; }
+  100% { transform: translate(140px, -22px); opacity: 0; }
+}
+
+.of-bob { animation: of-bob 3.8s ease-in-out infinite; }
+.of-type-l { animation: of-type-l 0.48s ease-in-out infinite; }
+.of-type-r { animation: of-type-r 0.48s ease-in-out infinite; }
+.of-line { transform-origin: left center; animation: of-line 2.6s ease-in-out infinite; }
+.of-say { opacity: 0; animation: of-say 4.2s ease-in-out infinite; }
+.of-cloud { animation: of-cloud 46s linear infinite; }
+.of-cloud-slow { animation: of-cloud 74s linear infinite; }
+.of-sway { animation: of-sway 5.2s ease-in-out infinite; }
+.of-sun { animation: of-sun 5s ease-in-out infinite; }
+.of-beacon { animation: of-beacon 2.2s steps(1, end) infinite; }
+.of-screen { animation: of-screen 4.6s ease-in-out infinite; }
+.of-nudge { animation: of-nudge 6s ease-in-out infinite; }
+.of-doc { animation: of-doc 11s linear infinite; }
+.of-walk { animation: of-walk 16s ease-in-out infinite; }
+.of-bird { animation: of-bird 19s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .of-floor * {
+    animation: none !important;
+  }
+  .of-floor .of-say {
+    opacity: 1;
+  }
 }

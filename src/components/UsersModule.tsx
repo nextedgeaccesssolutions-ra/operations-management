@@ -46,6 +46,19 @@ export default function UsersModule() {
 
   return (
     <div className="space-y-6">
+      {/* The list below is a fixed sample compiled into the build, not the
+          accounts that can actually sign in. Those live in the account store
+          and are managed under Access Requests. Saying so here keeps this
+          screen from reading as a real access-control surface. */}
+      <div className="glass-card rounded-xl p-4 border border-amber-500/30">
+        <p className="text-xs text-amber-200 leading-relaxed">
+          <strong>These are sample people, not sign-in accounts.</strong> This directory is a
+          fixed list compiled into the build. The accounts that can actually sign in to this
+          deployment, and the requests waiting on a decision, are under{' '}
+          <strong>Access Requests</strong>.
+        </p>
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="glass-card rounded-xl p-5">

@@ -1,0 +1,113 @@
+name: CI
+
+# The repository had no CI, so the test suite only ran if someone remembered
+# to run it. This makes typecheck, build and the end-to-end suite run on every
+# push and pull request, which is also where the security regression evidence
+# for the authentication work lives: tests/e2e.mjs asserts that no password is
+# stored in the clear, that the session record carries no role, that a pending
+# account is shown no company data, and that a member cannot reach the admin
+# queue.
+
+# Pushes to the long-lived branches, and pull requests. Deliberately not
+# `push` on every branch as well: a PR branch would then run this twice per
+# push, for the same commit and the same result, at twice the Actions minutes.
+on:
+  push:
+    branches:
+      - main
+      - improve-virtual-office-97d2c
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, build and end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      # Server and tests share one step on purpose. A process backgrounded in
+      # one step is orphaned across the step boundary, which fails in ways that
+      # look like a flaky test rather than a broken harness.
+      - name: End-to-end suite
+        run: |
+          set -euo pipefail
+          npm run preview &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+
+          up=""
+          for _ in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:4173/; then
+              up=yes
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "$up" ]; then
+            echo "preview did not come up within 60s"
+            exit 1
+          fi
+
+          npm run test:e2e
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: tests/screenshots/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Reported in full so nothing is hidden, but the gate is set at critical.
+      # This repository already carries moderate advisories whose fix is a
+      # breaking major bump of `uuid`; failing the build on inherited debt from
+      # day one would train everyone to ignore a permanently red check. Raise
+      # the gate once those are cleared.
+      - name: Report advisories
+        run: npm audit || true
+
+      - name: Fail on critical advisories
+        run: npm audit --audit-level=critical
