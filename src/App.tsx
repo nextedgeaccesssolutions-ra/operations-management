@@ -6,14 +6,23 @@ import AIStaffDirectory from './components/AIStaffDirectory';
 import AgentTaskMonitor from './components/AgentTaskMonitor';
 import EmailCenter from './components/EmailCenter';
 import ApprovalInbox from './components/ApprovalInbox';
+import LiveWorkforceControlCenter from './components/LiveWorkforceControlCenter';
+import AIExecutiveAssistant from './components/AIExecutiveAssistant';
+import CompanyKnowledgeBase from './components/CompanyKnowledgeBase';
+import WorkflowBuilder from './components/WorkflowBuilder';
+import SalesCRM from './components/SalesCRM';
 
 type ViewType = 
   | 'executive'
+  | 'workforce'
+  | 'assistant'
+  | 'knowledge'
+  | 'workflows'
+  | 'crm'
   | 'staff-directory'
   | 'task-monitor'
   | 'email-center'
   | 'approval-inbox'
-  | 'crm'
   | 'projects'
   | 'boq'
   | 'finance'
@@ -32,11 +41,15 @@ export default function App() {
 
   const navigationItems = [
     { id: 'executive' as ViewType, icon: '👔', label: 'Executive Center', badge: orchestrationEngine.getPendingApprovals().length },
+    { id: 'workforce' as ViewType, icon: '🎛️', label: 'Workforce Control' },
+    { id: 'assistant' as ViewType, icon: '💬', label: 'AI Assistant' },
+    { id: 'knowledge' as ViewType, icon: '📚', label: 'Knowledge Base' },
+    { id: 'workflows' as ViewType, icon: '⚙️', label: 'Workflows' },
+    { id: 'crm' as ViewType, icon: '📊', label: 'Sales CRM' },
     { id: 'staff-directory' as ViewType, icon: '🤖', label: 'AI Staff' },
     { id: 'task-monitor' as ViewType, icon: '📋', label: 'Task Monitor', badge: orchestrationEngine.getTasksByStatus('in_progress').length },
     { id: 'email-center' as ViewType, icon: '📧', label: 'Email Center' },
     { id: 'approval-inbox' as ViewType, icon: '✓', label: 'Approvals', badge: orchestrationEngine.getPendingApprovals().length },
-    { id: 'crm' as ViewType, icon: '📊', label: 'CRM & Sales' },
     { id: 'projects' as ViewType, icon: '🏗️', label: 'Projects' },
     { id: 'boq' as ViewType, icon: '🧮', label: 'BOQ & Quotes' },
     { id: 'finance' as ViewType, icon: '💰', label: 'Finance' },
@@ -54,6 +67,16 @@ export default function App() {
     switch (currentView) {
       case 'executive':
         return <ExecutiveCommandCenter />;
+      case 'workforce':
+        return <LiveWorkforceControlCenter />;
+      case 'assistant':
+        return <AIExecutiveAssistant />;
+      case 'knowledge':
+        return <CompanyKnowledgeBase />;
+      case 'workflows':
+        return <WorkflowBuilder />;
+      case 'crm':
+        return <SalesCRM />;
       case 'staff-directory':
         return <AIStaffDirectory />;
       case 'task-monitor':
