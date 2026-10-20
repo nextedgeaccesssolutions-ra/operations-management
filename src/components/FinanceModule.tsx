@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import GoogleSheetsService, { FinancialRecord } from '../services/googleSheetsService';
+import PersistenceService from '../services/persistenceService';
 
 interface Invoice {
   id: string;
@@ -21,6 +23,37 @@ interface Expense {
   project?: string;
   approved: boolean;
 }
+
+// Convert FinancialRecord to Invoice/Expense format
+const convertToInvoices = (records: FinancialRecord[]): Invoice[] => {
+  return records
+    .filter(r => r.type === 'income')
+    .map((r, i) => ({
+      id: r.id || `INV-${i + 1}`,
+      invoiceNumber: `INV-2024-${(i + 1).toString().padStart(3, '0')}`,
+      client: r.project || 'Client',
+      project: r.project || 'Project',
+      amount: r.amount,
+      issuedDate: r.date,
+      dueDate: new Date(new Date(r.date).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      status: r.approved ? 'paid' as const : 'sent' as const,
+      paidDate: r.approved ? r.date : undefined
+    }));
+};
+
+const convertToExpenses = (records: FinancialRecord[]): Expense[] => {
+  return records
+    .filter(r => r.type === 'expense')
+    .map(r => ({
+      id: r.id,
+      category: r.category,
+      description: r.description,
+      amount: r.amount,
+      date: r.date,
+      project: r.project,
+      approved: r.approved
+    }));
+};
 
 const sampleInvoices: Invoice[] = [
   {
@@ -106,9 +139,47 @@ const sampleExpenses: Expense[] = [
 ];
 
 export default function FinanceModule() {
-  const [invoices] = useState<Invoice[]>(sampleInvoices);
-  const [expenses] = useState<Expense[]>(sampleExpenses);
+  const [invoices, setInvoices] = useState<Invoice[]>(() => {
+    const saved = PersistenceService.loadModuleData<Invoice[]>('invoices', []);
+    return saved.length > 0 ? saved : sampleInvoices;
+  });
+  const [expenses, setExpenses] = useState<Expense[]>(() => {
+    const saved = PersistenceService.loadModuleData<Expense[]>('expenses', []);
+    return saved.length > 0 ? saved : sampleExpenses;
+  });
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'expenses' | 'cashflow'>('overview');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Load real data from Google Sheets on mount
+  useEffect(() => {
+    const loadRealData = async () => {
+      setIsLoading(true);
+      try {
+        const records = await GoogleSheetsService.getFinancialRecords();
+        if (records.length > 0) {
+          const convertedInvoices = convertToInvoices(records);
+          const convertedExpenses = convertToExpenses(records);
+          
+          if (convertedInvoices.length > 0) {
+            setInvoices(convertedInvoices);
+            PersistenceService.saveModuleData('invoices', convertedInvoices);
+          }
+          if (convertedExpenses.length > 0) {
+            setExpenses(convertedExpenses);
+            PersistenceService.saveModuleData('expenses', convertedExpenses);
+          }
+          
+          console.log('[FinanceModule] Loaded', records.length, 'financial records from Google Sheets');
+        }
+      } catch (error) {
+        console.error('[FinanceModule] Failed to load real data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadRealData();
+  }, []);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(value);

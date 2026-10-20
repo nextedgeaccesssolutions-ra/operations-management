@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { agents, getAgentById, getDepartmentStats } from './neas/agentRegistry';
 import { orchestrationEngine } from './neas/orchestrationEngine';
+import PersistenceService from './services/persistenceService';
+import ErrorBoundary from './components/ErrorBoundary';
 import ExecutiveCommandCenter from './components/ExecutiveCommandCenter';
 import AIStaffDirectory from './components/AIStaffDirectory';
 import AgentTaskMonitor from './components/AgentTaskMonitor';
@@ -49,6 +51,64 @@ type ViewType =
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewType>('executive');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Initialize persistence and load saved data
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        // Load saved orchestration data
+        const savedData = PersistenceService.loadOrchestrationData();
+        
+        // Log initialization
+        orchestrationEngine.addAuditLog(
+          'system',
+          'app',
+          'app_initialized',
+          'system',
+          'app',
+          'Application initialized with persistence',
+          'info',
+          {
+            tasksLoaded: savedData.tasks.length,
+            approvalsLoaded: savedData.approvals.length,
+            auditLogsLoaded: savedData.auditLogs.length
+          }
+        );
+
+        console.log('[App] Initialized with persistence');
+        setIsInitialized(true);
+      } catch (error) {
+        console.error('[App] Failed to initialize:', error);
+        setIsInitialized(true); // Continue even if persistence fails
+      }
+    };
+
+    initializeApp();
+  }, []);
+
+  // Auto-save orchestration data periodically
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const saveInterval = setInterval(() => {
+      try {
+        const tasks = orchestrationEngine.getAllTasks();
+        const approvals = orchestrationEngine.getAllApprovals();
+        const auditLogs = orchestrationEngine.getAuditLogs();
+
+        PersistenceService.saveOrchestrationData({
+          tasks,
+          approvals,
+          auditLogs
+        });
+      } catch (error) {
+        console.error('[App] Failed to auto-save:', error);
+      }
+    }, 30000); // Save every 30 seconds
+
+    return () => clearInterval(saveInterval);
+  }, [isInitialized]);
 
   const navigationItems = [
     { id: 'executive' as ViewType, icon: '👔', label: 'Executive Center', badge: orchestrationEngine.getPendingApprovals().length },
@@ -132,9 +192,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#071D29] via-[#0a2a3a] to-[#071D29] flex">
-      {/* Sidebar */}
-      <aside className={`${sidebarCollapsed ? 'w-16' : 'w-64'} bg-[#071D29]/80 backdrop-blur-xl border-r border-[#CA9332]/20 flex flex-col transition-all duration-300`}>
+    <ErrorBoundary>
+      <div className="min-h-screen bg-gradient-to-br from-[#071D29] via-[#0a2a3a] to-[#071D29] flex">
+        {/* Sidebar */}
+        <aside className={`${sidebarCollapsed ? 'w-16' : 'w-64'} bg-[#071D29]/80 backdrop-blur-xl border-r border-[#CA9332]/20 flex flex-col transition-all duration-300`}>
         {/* Logo */}
         <div className="p-4 border-b border-[#CA9332]/20">
           <div className="flex items-center gap-3">
@@ -240,5 +301,6 @@ export default function App() {
         </div>
       </main>
     </div>
+    </ErrorBoundary>
   );
 }

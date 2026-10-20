@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import GoogleSheetsService, { EmployeeRecord } from '../services/googleSheetsService';
+import PersistenceService from '../services/persistenceService';
 
 interface Employee {
   id: string;
@@ -10,6 +12,45 @@ interface Employee {
   certifications: { name: string; expiryDate: string; status: 'valid' | 'expiring' | 'expired' }[];
   skills: string[];
 }
+
+// Convert EmployeeRecord to Employee format
+const convertRecord = (record: EmployeeRecord): Employee => {
+  // Generate mock certifications based on position
+  const certifications = [];
+  if (record.position.includes('IRATA')) {
+    const level = record.position.match(/L(\d)/)?.[1] || '1';
+    certifications.push({
+      name: `IRATA Level ${level}`,
+      expiryDate: '2025-12-31',
+      status: 'valid' as const
+    });
+  }
+  if (record.skills.some(s => s.includes('Safety'))) {
+    certifications.push({
+      name: 'Safety Officer',
+      expiryDate: '2024-12-31',
+      status: 'expiring' as const
+    });
+  }
+  if (certifications.length === 0) {
+    certifications.push({
+      name: 'First Aid',
+      expiryDate: '2025-06-30',
+      status: 'valid' as const
+    });
+  }
+
+  return {
+    id: record.id,
+    name: record.name,
+    position: record.position,
+    department: record.department,
+    status: record.status,
+    hireDate: record.hireDate,
+    certifications,
+    skills: record.skills
+  };
+};
 
 const sampleEmployees: Employee[] = [
   {
@@ -41,8 +82,35 @@ const sampleEmployees: Employee[] = [
 ];
 
 export default function HRModule() {
-  const [employees] = useState<Employee[]>(sampleEmployees);
+  const [employees, setEmployees] = useState<Employee[]>(() => {
+    // Load from localStorage first
+    const saved = PersistenceService.loadModuleData<Employee[]>('employees', []);
+    return saved.length > 0 ? saved : sampleEmployees;
+  });
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Load real data from Google Sheets on mount
+  useEffect(() => {
+    const loadRealData = async () => {
+      setIsLoading(true);
+      try {
+        const records = await GoogleSheetsService.getEmployees();
+        if (records.length > 0) {
+          const convertedEmployees = records.map(convertRecord);
+          setEmployees(convertedEmployees);
+          PersistenceService.saveModuleData('employees', convertedEmployees);
+          console.log('[HRModule] Loaded', records.length, 'employees from Google Sheets');
+        }
+      } catch (error) {
+        console.error('[HRModule] Failed to load real data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadRealData();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
