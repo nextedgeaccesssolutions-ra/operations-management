@@ -8,9 +8,14 @@ name: CI
 # account is shown no company data, and that a member cannot reach the admin
 # queue.
 
+# Pushes to the long-lived branches, and pull requests. Deliberately not
+# `push` on every branch as well: a PR branch would then run this twice per
+# push, for the same commit and the same result, at twice the Actions minutes.
 on:
   push:
-    branches: ['**']
+    branches:
+      - main
+      - improve-virtual-office-97d2c
   pull_request:
 
 permissions:
