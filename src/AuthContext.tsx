@@ -1,146 +1,196 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  type Account,
+  type AccountRole,
+  accountById,
+  decide as decideInStore,
+  endSession,
+  migrateLegacyAccounts,
+  pendingInCompany,
+  accountsInCompany,
+  resumeSession,
+  setRole as setRoleInStore,
+  signIn as signInStore,
+  signUp as signUpStore,
+  startSession,
+} from "./auth/accountStore";
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  company: string;
-  role: string;
-  avatar: string;
-  createdAt: string;
-}
+/**
+ * Kept as an alias so existing imports of `User` keep compiling. The account
+ * record now also carries approval state and a company-scoped role.
+ */
+export type User = Account;
+export type { Account, AccountRole };
 
-interface StoredAccount {
-  user: User;
-  password: string;
-}
-
-interface AuthContextType {
-  user: User | null;
+export interface AuthContextType {
+  account: Account | null;
   loading: boolean;
-  login: (email: string, password: string) => { success: boolean; error?: string };
-  signup: (name: string, email: string, password: string, company: string) => { success: boolean; error?: string };
-  logout: () => void;
+  /** One-off notice about accounts carried over from the old plaintext store. */
+  notice: string | null;
+  dismissNotice: () => void;
+
+  signIn: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  signUp: (
+    name: string,
+    email: string,
+    password: string,
+    company: string
+  ) => Promise<{ ok: boolean; error?: string; pending?: boolean }>;
+  signOut: () => void;
+  /** Re-read the signed-in account from the store. */
+  refresh: () => void;
+
+  /** True once the account exists AND an owner or admin has approved it. */
+  approved: boolean;
+  isAdmin: boolean;
+
+  pendingRequests: Account[];
+  colleagues: Account[];
+  decide: (
+    targetId: string,
+    decision: "approve" | "reject",
+    grantAdmin?: boolean
+  ) => { ok: boolean; error?: string };
+  changeRole: (targetId: string, role: "admin" | "member") => { ok: boolean; error?: string };
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function generateId() {
-  return Math.random().toString(36).substring(2, 10);
-}
-
-function getAvatar(name: string) {
-  const avatars = ['👤', '🧑‍💼', '👩‍💼', '🧑‍💻', '👨‍💼', '👩‍💻', '🧑‍🔧', '👨‍🔬', '👩‍🔬'];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return avatars[Math.abs(hash) % avatars.length];
-}
-
-function getStoredAccounts(): StoredAccount[] {
-  try {
-    const raw = localStorage.getItem('neas_accounts');
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveAccounts(accounts: StoredAccount[]) {
-  localStorage.setItem('neas_accounts', JSON.stringify(accounts));
-}
-
-function getStoredSession(): User | null {
-  try {
-    const raw = localStorage.getItem('neas_session');
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveSession(user: User | null) {
-  if (user) {
-    localStorage.setItem('neas_session', JSON.stringify(user));
-  } else {
-    localStorage.removeItem('neas_session');
-  }
-}
-
-// Seed a demo account on first load
-function seedDemoAccount() {
-  const accounts = getStoredAccounts();
-  if (!accounts.find(a => a.user.email === 'demo@neas.co')) {
-    const demoUser: User = {
-      id: generateId(),
-      name: 'Demo User',
-      email: 'demo@neas.co',
-      company: 'Next Edge Access Solutions',
-      role: 'Administrator',
-      avatar: '🧑‍💼',
-      createdAt: new Date().toISOString(),
-    };
-    accounts.push({ user: demoUser, password: 'demo123' });
-    saveAccounts(accounts);
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Bumped after any store write so derived lists recompute.
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
-    seedDemoAccount();
-    const session = getStoredSession();
-    if (session) setUser(session);
-    setLoading(false);
+    let cancelled = false;
+    (async () => {
+      try {
+        const { moved, droppedDemo } = await migrateLegacyAccounts();
+        if (!cancelled && (moved > 0 || droppedDemo)) {
+          const parts: string[] = [];
+          if (moved > 0) {
+            parts.push(
+              `${moved} existing account${moved === 1 ? "" : "s"} moved off the old plaintext store and re-secured`
+            );
+          }
+          if (droppedDemo) parts.push("the seeded demo@neas.co credential was removed");
+          setNotice(parts.join("; ") + ".");
+        }
+      } catch {
+        /* migration is best effort; a failure must not block sign-in */
+      }
+      const resumed = resumeSession();
+      if (!cancelled) {
+        setAccount(resumed);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const login = (email: string, password: string) => {
-    const accounts = getStoredAccounts();
-    const account = accounts.find(a => a.user.email.toLowerCase() === email.toLowerCase());
-    if (!account) return { success: false, error: 'No account found with that email' };
-    if (account.password !== password) return { success: false, error: 'Incorrect password' };
-    setUser(account.user);
-    saveSession(account.user);
-    return { success: true };
-  };
+  const refresh = useCallback(() => {
+    setAccount((current) => (current ? accountById(current.id) : null));
+    setRevision((r) => r + 1);
+  }, []);
 
-  const signup = (name: string, email: string, password: string, company: string) => {
-    const accounts = getStoredAccounts();
-    if (accounts.find(a => a.user.email.toLowerCase() === email.toLowerCase())) {
-      return { success: false, error: 'An account with this email already exists' };
-    }
-    if (password.length < 6) return { success: false, error: 'Password must be at least 6 characters' };
-    const newUser: User = {
-      id: generateId(),
-      name,
-      email,
-      company,
-      role: 'Administrator',
-      avatar: getAvatar(name),
-      createdAt: new Date().toISOString(),
-    };
-    accounts.push({ user: newUser, password });
-    saveAccounts(accounts);
-    setUser(newUser);
-    saveSession(newUser);
-    return { success: true };
-  };
+  const signIn = useCallback(async (email: string, password: string) => {
+    const res = await signInStore(email, password);
+    if (!res.ok) return { ok: false, error: res.error };
+    startSession(res.account.id);
+    setAccount(res.account);
+    setRevision((r) => r + 1);
+    return { ok: true };
+  }, []);
 
-  const logout = () => {
-    setUser(null);
-    saveSession(null);
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
-      {children}
-    </AuthContext.Provider>
+  const signUp = useCallback(
+    async (name: string, email: string, password: string, company: string) => {
+      const res = await signUpStore({ name, email, password, company });
+      if (!res.ok) return { ok: false, error: res.error };
+      // A pending account gets a session too — it needs somewhere to land and
+      // see that it is waiting. The approval gate lives on `approved`, below,
+      // so a session alone never grants access to company data.
+      startSession(res.account.id);
+      setAccount(res.account);
+      setRevision((r) => r + 1);
+      return { ok: true, pending: res.account.status === "pending" };
+    },
+    []
   );
+
+  const signOut = useCallback(() => {
+    endSession();
+    setAccount(null);
+    setRevision((r) => r + 1);
+  }, []);
+
+  const decide = useCallback(
+    (targetId: string, decision: "approve" | "reject", grantAdmin = false) => {
+      if (!account) return { ok: false, error: "Sign in first." };
+      const res = decideInStore(account, targetId, decision, grantAdmin);
+      setRevision((r) => r + 1);
+      return res.ok ? { ok: true } : { ok: false, error: res.error };
+    },
+    [account]
+  );
+
+  const changeRole = useCallback(
+    (targetId: string, role: "admin" | "member") => {
+      if (!account) return { ok: false, error: "Sign in first." };
+      const res = setRoleInStore(account, targetId, role);
+      setRevision((r) => r + 1);
+      return res.ok ? { ok: true } : { ok: false, error: res.error };
+    },
+    [account]
+  );
+
+  const isAdmin = account?.role === "owner" || account?.role === "admin";
+  const approved = account?.status === "approved";
+
+  const pendingRequests = useMemo(
+    () => (account && isAdmin ? pendingInCompany(account.companyKey) : []),
+    // revision is the dependency that makes this recompute after a write.
+    [account, isAdmin, revision]
+  );
+
+  const colleagues = useMemo(
+    () => (account ? accountsInCompany(account.companyKey) : []),
+    [account, revision]
+  );
+
+  const value: AuthContextType = {
+    account,
+    loading,
+    notice,
+    dismissNotice: () => setNotice(null),
+    signIn,
+    signUp,
+    signOut,
+    refresh,
+    approved,
+    isAdmin,
+    pendingRequests,
+    colleagues,
+    decide,
+    changeRole,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }

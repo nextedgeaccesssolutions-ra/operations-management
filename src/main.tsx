@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import ErrorBoundary from "./ErrorBoundary";
+import { AuthProvider } from "./AuthContext";
 
 // Global error handler - IGNORE "[Script error.]" from cross-origin scripts
 // This is normal browser behavior for scripts from different origins (like Google's)
@@ -36,7 +37,9 @@ window.addEventListener('unhandledrejection', (event) => {
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );
