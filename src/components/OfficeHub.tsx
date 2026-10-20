@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { officeDevices, type OfficeDevice } from '../data';
+import { agents } from '../neas/agentRegistry';
+import { orchestrationEngine } from '../neas/orchestrationEngine';
+import OfficeFloor, { type FloorTile } from './OfficeFloor';
 
 export default function OfficeHub() {
   const [selectedType, setSelectedType] = useState<'all' | 'table' | 'laptop' | 'windows' | 'salas' | 'tv'>('all');
@@ -43,24 +46,61 @@ export default function OfficeHub() {
     }
   };
 
+  // The floor's screens show live application state, not decoration.
+  const onDuty = agents.filter((a) => a.status === 'active' || a.status === 'busy').length;
+  const awaitingSignOff = orchestrationEngine.getPendingApprovals().length;
+  const floorTiles: FloorTile[] = [
+    { label: 'On duty', value: `${onDuty}/${agents.length}` },
+    { label: 'Awaiting sign-off', value: String(awaitingSignOff) },
+  ];
+
+  // Derived from the inventory rather than asserted: a room with anything in
+  // maintenance is not "all online".
+  const allOnline = statusStats.maintenance === 0;
+
   return (
     <div className="space-y-6">
+      {/* The floor itself */}
+      <OfficeFloor tiles={floorTiles} />
+
       {/* Header */}
-      <div className="glass-card rounded-2xl p-6 border-blue-500/20!">
-        <div className="flex items-center justify-between">
+      <div className="glass-card rounded-2xl p-6 border-[#CA9332]/20!">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 flex items-center justify-center text-2xl">
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#CA9332]/20 to-[#EBC07E]/20 border border-[#CA9332]/30 flex items-center justify-center text-2xl">
               🏢
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Virtual Office Hub</h2>
-              <p className="text-xs text-slate-400">Office equipment and asset management</p>
+              <h2 className="text-lg font-bold text-white">Room &amp; equipment inventory</h2>
+              <p className="text-xs text-slate-400">
+                What is in each room on the floor above, and the state it was last found in
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20">
-              <span className="w-2 h-2 rounded-full bg-green-500 status-pulse" />
-              <span className="text-[10px] text-green-400 font-medium">All Systems Online</span>
+            <div
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+                allOnline
+                  ? 'bg-green-500/10 border-green-500/20'
+                  : 'bg-amber-500/10 border-amber-500/20'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full status-pulse ${
+                  allOnline ? 'bg-green-500' : 'bg-amber-500'
+                }`}
+              />
+              <span
+                className={`text-[10px] font-medium ${
+                  allOnline ? 'text-green-400' : 'text-amber-300'
+                }`}
+              >
+                {allOnline
+                  ? 'Nothing in maintenance'
+                  : `${statusStats.maintenance} item${
+                      statusStats.maintenance === 1 ? '' : 's'
+                    } in maintenance`}
+              </span>
             </div>
           </div>
         </div>
