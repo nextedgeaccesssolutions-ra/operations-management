@@ -1,7 +1,33 @@
+import { useState, useEffect } from 'react';
 import { orchestrationEngine } from '../neas/orchestrationEngine';
 import { agents, getDepartmentStats, getAgentById } from '../neas/agentRegistry';
 
 export default function ExecutiveCommandCenter() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+
+  const loadData = () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      // Data is loaded from orchestrationEngine
+      setLastRefresh(new Date());
+    } catch (err) {
+      setError('Failed to load executive data');
+      console.error('[ExecutiveCommandCenter] Error loading data:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const taskStats = orchestrationEngine.getTaskStatistics();
   const pendingApprovals = orchestrationEngine.getPendingApprovals();
   const recentAuditLogs = orchestrationEngine.getAuditLogs(10);
@@ -13,8 +39,63 @@ export default function ExecutiveCommandCenter() {
   const criticalTasks = taskStats.byPriority.critical;
   const highPriorityTasks = taskStats.byPriority.high;
 
+  const handleApprove = (approvalId: string) => {
+    try {
+      orchestrationEngine.approveRequest(approvalId, 'CEO', 'Approved via Executive Command Center');
+      loadData();
+    } catch (err) {
+      console.error('[ExecutiveCommandCenter] Error approving request:', err);
+    }
+  };
+
+  const handleReject = (approvalId: string) => {
+    try {
+      orchestrationEngine.rejectRequest(approvalId, 'CEO', 'Rejected via Executive Command Center');
+      loadData();
+    } catch (err) {
+      console.error('[ExecutiveCommandCenter] Error rejecting request:', err);
+    }
+  };
+
+  const handleViewDetails = (approvalId: string) => {
+    // Navigate to approval inbox with this approval selected
+    // For now, just log it
+    console.log('[ExecutiveCommandCenter] View details for approval:', approvalId);
+  };
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-white mb-2">Error Loading Data</h2>
+          <p className="text-slate-400 mb-4">{error}</p>
+          <button
+            onClick={loadData}
+            className="px-4 py-2 rounded-lg bg-[#CA9332]/20 text-[#EBC07E] text-sm font-medium hover:bg-[#CA9332]/30 transition-all"
+            aria-label="Retry loading data"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Loading Indicator */}
+      {isLoading && (
+        <div className="fixed top-4 right-4 px-4 py-2 rounded-lg bg-slate-800/90 border border-slate-700/50 text-xs text-slate-400 z-50">
+          <span className="animate-spin">⏳</span> Loading executive data...
+        </div>
+      )}
+
+      {/* Last Refresh Indicator */}
+      <div className="text-[10px] text-slate-500 text-right">
+        Last updated: {lastRefresh.toLocaleTimeString()}
+      </div>
+
       {/* Executive Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="glass-card rounded-xl p-5 border-l-4 border-l-[#CA9332]">
@@ -109,13 +190,25 @@ export default function ExecutiveCommandCenter() {
                     <span>{new Date(approval.requestedAt).toLocaleDateString()}</span>
                   </div>
                   <div className="flex items-center gap-2 mt-3">
-                    <button className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 text-xs font-medium hover:bg-green-500/30 transition-all">
+                    <button 
+                      onClick={() => handleApprove(approval.id)}
+                      className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 text-xs font-medium hover:bg-green-500/30 transition-all"
+                      aria-label={`Approve ${approval.taskTitle}`}
+                    >
                       ✓ Approve
                     </button>
-                    <button className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/30 transition-all">
+                    <button 
+                      onClick={() => handleReject(approval.id)}
+                      className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/30 transition-all"
+                      aria-label={`Reject ${approval.taskTitle}`}
+                    >
                       ✕ Reject
                     </button>
-                    <button className="px-3 py-1.5 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all">
+                    <button 
+                      onClick={() => handleViewDetails(approval.id)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all"
+                      aria-label={`View details for ${approval.taskTitle}`}
+                    >
                       View Details
                     </button>
                   </div>
@@ -189,6 +282,14 @@ export default function ExecutiveCommandCenter() {
         <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
           <span>🔥</span> High Priority Tasks
         </h3>
+        {orchestrationEngine.getTasksByPriority('critical').concat(
+          orchestrationEngine.getTasksByPriority('high')
+        ).length === 0 ? (
+          <div className="text-center py-8 text-slate-500">
+            <div className="text-4xl mb-2">✓</div>
+            <p className="text-sm">No high priority tasks</p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {orchestrationEngine.getTasksByPriority('critical').concat(
             orchestrationEngine.getTasksByPriority('high')
@@ -222,6 +323,7 @@ export default function ExecutiveCommandCenter() {
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );

@@ -23,6 +23,7 @@ export default function EnterpriseCommandCenter() {
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [filterDateRange, setFilterDateRange] = useState<string>('today');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadMetrics();
@@ -32,24 +33,60 @@ export default function EnterpriseCommandCenter() {
 
   const loadMetrics = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       // Load orchestration data
       const tasks = orchestrationEngine.getAllTasks();
       const approvals = orchestrationEngine.getPendingApprovals();
       const auditLogs = orchestrationEngine.getAuditLogs(100);
 
+      // Apply filters
+      let filteredTasks = tasks;
+      
+      // Department filter
+      if (filterDepartment !== 'all') {
+        filteredTasks = filteredTasks.filter(t => t.department === filterDepartment);
+      }
+      
+      // Date range filter
+      const now = new Date();
+      if (filterDateRange === 'today') {
+        filteredTasks = filteredTasks.filter(t => {
+          if (!t.createdAt) return false;
+          const created = new Date(t.createdAt);
+          return created.toDateString() === now.toDateString();
+        });
+      } else if (filterDateRange === 'week') {
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        filteredTasks = filteredTasks.filter(t => {
+          if (!t.createdAt) return false;
+          return new Date(t.createdAt) >= weekAgo;
+        });
+      } else if (filterDateRange === 'month') {
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        filteredTasks = filteredTasks.filter(t => {
+          if (!t.createdAt) return false;
+          return new Date(t.createdAt) >= monthAgo;
+        });
+      } else if (filterDateRange === 'quarter') {
+        const quarterAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        filteredTasks = filteredTasks.filter(t => {
+          if (!t.createdAt) return false;
+          return new Date(t.createdAt) >= quarterAgo;
+        });
+      }
+
       // Calculate metrics
-      const activeTasks = tasks.filter(t => t.status === 'in_progress').length;
-      const completedToday = tasks.filter(t => {
+      const activeTasks = filteredTasks.filter(t => t.status === 'in_progress').length;
+      const completedToday = filteredTasks.filter(t => {
         if (!t.completedAt) return false;
         const completed = new Date(t.completedAt);
-        const today = new Date();
-        return completed.toDateString() === today.toDateString();
+        return completed.toDateString() === now.toDateString();
       }).length;
 
-      const overdueTasks = tasks.filter(t => {
+      const overdueTasks = filteredTasks.filter(t => {
         if (!t.dueDate || t.status === 'completed') return false;
-        return new Date(t.dueDate) < new Date();
+        return new Date(t.dueDate) < now;
       }).length;
 
       // Agent metrics
@@ -156,9 +193,23 @@ export default function EnterpriseCommandCenter() {
 
     } catch (error) {
       console.error('[EnterpriseCommandCenter] Failed to load metrics:', error);
+      setError('Failed to load enterprise metrics. Please try again.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleViewOverdueTasks = () => {
+    // Navigate to task monitor with overdue filter
+    console.log('[EnterpriseCommandCenter] Navigate to overdue tasks');
+    // In a real app, this would use router navigation
+    // For now, we'll just log it
+  };
+
+  const handleReviewApprovals = () => {
+    // Navigate to approval inbox
+    console.log('[EnterpriseCommandCenter] Navigate to approval inbox');
+    // In a real app, this would use router navigation
   };
 
   const getStatusColor = (status: string) => {
@@ -188,6 +239,26 @@ export default function EnterpriseCommandCenter() {
     }
   };
 
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-white mb-2">Error Loading Data</h2>
+          <p className="text-slate-400 mb-4">{error}</p>
+          <button
+            onClick={loadMetrics}
+            className="px-4 py-2 rounded-lg bg-[#CA9332]/20 text-[#EBC07E] text-sm font-medium hover:bg-[#CA9332]/30 transition-all"
+            aria-label="Retry loading metrics"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -202,6 +273,7 @@ export default function EnterpriseCommandCenter() {
               value={filterDepartment}
               onChange={(e) => setFilterDepartment(e.target.value)}
               className="px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white focus:outline-none focus:border-[#CA9332]/50"
+              aria-label="Filter by department"
             >
               <option value="all">All Departments</option>
               <option value="executive">Executive</option>
@@ -213,6 +285,7 @@ export default function EnterpriseCommandCenter() {
               value={filterDateRange}
               onChange={(e) => setFilterDateRange(e.target.value)}
               className="px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs text-white focus:outline-none focus:border-[#CA9332]/50"
+              aria-label="Filter by date range"
             >
               <option value="today">Today</option>
               <option value="week">This Week</option>
@@ -284,7 +357,11 @@ export default function EnterpriseCommandCenter() {
               <p className="text-xs text-slate-400">
                 {metrics.overdueTasks.value} tasks are past their due date and require immediate attention.
               </p>
-              <button className="mt-2 px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/30 transition-all">
+              <button 
+                onClick={handleViewOverdueTasks}
+                className="mt-2 px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/30 transition-all"
+                aria-label="View overdue tasks"
+              >
                 View Overdue Tasks
               </button>
             </div>
@@ -302,7 +379,11 @@ export default function EnterpriseCommandCenter() {
               <p className="text-xs text-slate-400">
                 {metrics.pendingApprovals.value} approval requests awaiting your decision.
               </p>
-              <button className="mt-2 px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-medium hover:bg-amber-500/30 transition-all">
+              <button 
+                onClick={handleReviewApprovals}
+                className="mt-2 px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-medium hover:bg-amber-500/30 transition-all"
+                aria-label="Review pending approvals"
+              >
                 Review Approvals
               </button>
             </div>

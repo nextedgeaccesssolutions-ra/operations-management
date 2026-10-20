@@ -25,6 +25,7 @@ export default function SystemHealthMonitor() {
   const [autoRecoveryEnabled, setAutoRecoveryEnabled] = useState(true);
   const [emergencyPause, setEmergencyPause] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     checkSystemHealth();
@@ -34,6 +35,7 @@ export default function SystemHealthMonitor() {
 
   const checkSystemHealth = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const auditLogs = orchestrationEngine.getAuditLogs(100);
       const tasks = orchestrationEngine.getAllTasks();
@@ -159,6 +161,7 @@ export default function SystemHealthMonitor() {
 
     } catch (error) {
       console.error('[SystemHealthMonitor] Health check failed:', error);
+      setError('Failed to check system health. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -207,6 +210,26 @@ export default function SystemHealthMonitor() {
   const downCount = healthStatus.filter(h => h.status === 'down').length;
   const unresolvedAlerts = alerts.filter(a => !a.resolved).length;
 
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-white mb-2">Error Checking System Health</h2>
+          <p className="text-slate-400 mb-4">{error}</p>
+          <button
+            onClick={checkSystemHealth}
+            className="px-4 py-2 rounded-lg bg-[#CA9332]/20 text-[#EBC07E] text-sm font-medium hover:bg-[#CA9332]/30 transition-all"
+            aria-label="Retry system health check"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header Controls */}
@@ -224,6 +247,7 @@ export default function SystemHealthMonitor() {
                   ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                   : 'bg-slate-700/30 text-slate-400 border border-slate-600/30'
               }`}
+              aria-label={autoRecoveryEnabled ? 'Disable auto-recovery' : 'Enable auto-recovery'}
             >
               {autoRecoveryEnabled ? '✓ Auto-Recovery ON' : '○ Auto-Recovery OFF'}
             </button>
@@ -234,6 +258,7 @@ export default function SystemHealthMonitor() {
                   ? 'bg-red-500/20 text-red-400 border border-red-500/30'
                   : 'bg-slate-700/30 text-slate-400 border border-slate-600/30'
               }`}
+              aria-label={emergencyPause ? 'Resume system operations' : 'Activate emergency pause'}
             >
               {emergencyPause ? '⏸ EMERGENCY PAUSE ACTIVE' : '⚠ Emergency Pause'}
             </button>
@@ -333,6 +358,7 @@ export default function SystemHealthMonitor() {
                     <button
                       onClick={() => handleResolveAlert(alert.id)}
                       className="px-2 py-1 rounded bg-slate-700/30 text-[10px] text-slate-400 hover:bg-slate-700/50 transition-all"
+                      aria-label={`Resolve alert for ${alert.component}`}
                     >
                       Resolve
                     </button>
@@ -358,6 +384,7 @@ export default function SystemHealthMonitor() {
                 <button
                   onClick={handleEmergencyPause}
                   className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 text-xs font-medium hover:bg-green-500/30 transition-all"
+                  aria-label="Resume all system operations"
                 >
                   Resume Operations
                 </button>
@@ -374,6 +401,7 @@ export default function SystemHealthMonitor() {
                     );
                   }}
                   className="px-4 py-2 rounded-lg bg-slate-700/30 text-slate-400 text-xs font-medium hover:bg-slate-700/50 transition-all"
+                  aria-label="Log emergency pause status to audit trail"
                 >
                   Log Status
                 </button>

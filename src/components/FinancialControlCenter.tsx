@@ -41,6 +41,7 @@ export default function FinancialControlCenter() {
   const [exceptions, setExceptions] = useState<FinancialException[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'projects' | 'cashflow' | 'exceptions'>('overview');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadFinancialData();
@@ -48,6 +49,7 @@ export default function FinancialControlCenter() {
 
   const loadFinancialData = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       // Load from Google Sheets
       const records = await GoogleSheetsService.getFinancialRecords();
@@ -163,6 +165,7 @@ export default function FinancialControlCenter() {
       }
     } catch (error) {
       console.error('[FinancialControlCenter] Failed to load financial data:', error);
+      setError('Failed to load financial data. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -201,6 +204,26 @@ export default function FinancialControlCenter() {
   const avgMargin = projectFinancials.length > 0 
     ? projectFinancials.reduce((sum, p) => sum + p.margin, 0) / projectFinancials.length 
     : 0;
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-white mb-2">Error Loading Financial Data</h2>
+          <p className="text-slate-400 mb-4">{error}</p>
+          <button
+            onClick={loadFinancialData}
+            className="px-4 py-2 rounded-lg bg-[#CA9332]/20 text-[#EBC07E] text-sm font-medium hover:bg-[#CA9332]/30 transition-all"
+            aria-label="Retry loading financial data"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
