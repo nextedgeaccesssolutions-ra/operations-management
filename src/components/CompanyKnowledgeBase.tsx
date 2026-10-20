@@ -34,7 +34,7 @@ const sampleDocuments: KnowledgeDocument[] = [
     id: '2',
     title: 'Standard Pricing Guidelines 2024',
     category: 'template',
-    content: 'Labor Rates:\n- IRATA L1 Technician: ₱1,500/day\n- IRATA L2 Supervisor: ₱2,000/day\n- IRATA L3 Manager: ₱2,500/day\n\nEquipment Rates:\n- Rope Access Kit: ₱500/day\n- Safety Harness: ₱200/day\n- Transport: ₱3,000/day (Metro Manila)\n\nMinimum Markup: 25%\nStandard Contingency: 10%',
+    content: 'Labor Rates:\n- IRATA L1 Technician: ₱2,500/day\n- IRATA L2 Supervisor: ₱3,000/day\n- IRATA L3 Manager: ₱7,500/day\n\nEquipment Rates:\n- Rope Access Kit: ₱500/day\n- Safety Harness: ₱200/day\n- Transport: ₱3,000/day (Metro Manila)\n\nMinimum Markup: 25%\nStandard Contingency: 10%',
     version: 2,
     lastUpdated: new Date('2024-02-01'),
     updatedBy: 'Finance Manager',
