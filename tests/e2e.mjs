@@ -116,17 +116,39 @@ try {
     .evaluateAll((els) => els.filter((e) => /(^|\s)0(\s|$)/.test(e.textContent ?? '')).map((e) => e.textContent));
   check('no sidebar item renders a bare 0', navZeros.length === 0, JSON.stringify(navZeros));
 
-  /* ── 5. modules that are not built say so ─────────────────────── */
-  console.log('\nHonest module states');
-  await page.getByRole('button', { name: /Projects/ }).click();
-  await page.waitForTimeout(300);
-  const projectsText = await page.locator('body').innerText();
-  check('an unbuilt module states it is not built', /is not built yet/i.test(projectsText));
+  /* ── 5. every nav entry resolves to a real view ───────────────── */
+  console.log('\nEvery module resolves');
+  // The business modules landed on the base branch after this work started.
+  // Each nav entry must now render its module rather than a placeholder.
+  const MODULES = [
+    'Projects',
+    'BOQ & Quotes',
+    'Finance',
+    'HR & Training',
+    'HSE & Quality',
+    'Procurement',
+    'Marketing',
+    'Reports',
+    'Integrations',
+    'Users',
+    'Audit Logs',
+  ];
+  for (const label of MODULES) {
+    await page.getByRole('button', { name: new RegExp(label.replace(/[&]/g, '\\&')) }).first().click();
+    await page.waitForTimeout(220);
+    const text = await page.locator('body').innerText();
+    check(`${label} renders a real view`, !/is not built yet|coming soon/i.test(text));
+  }
+
+  // The users directory must not read as the real access-control surface.
+  await page.getByRole('button', { name: /^Users$/ }).first().click();
+  await page.waitForTimeout(250);
+  const usersText = await page.locator('body').innerText();
   check(
-    'it names what is still missing instead of a generic placeholder',
-    /Gantt|milestones/i.test(projectsText)
+    'the users directory says it is sample people, not sign-in accounts',
+    /sample people, not sign-in accounts/i.test(usersText)
   );
-  check('it does not claim to be coming soon', !/coming soon/i.test(projectsText));
+  check('it points at where the real accounts are', /Access Requests/.test(usersText));
 
   /* ── 6. the drawn floor ───────────────────────────────────────── */
   console.log('\nThe virtual office floor');

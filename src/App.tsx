@@ -16,6 +16,17 @@ import WorkflowBuilder from './components/WorkflowBuilder';
 import SalesCRM from './components/SalesCRM';
 import OfficeHub from './components/OfficeHub';
 import InterDepartmentFeed from './components/InterDepartmentFeed';
+import ProjectsModule from './components/ProjectsModule';
+import FinanceModule from './components/FinanceModule';
+import BOQModule from './components/BOQModule';
+import HRModule from './components/HRModule';
+import HSEModule from './components/HSEModule';
+import ProcurementModule from './components/ProcurementModule';
+import MarketingModule from './components/MarketingModule';
+import ReportsModule from './components/ReportsModule';
+import IntegrationsModule from './components/IntegrationsModule';
+import UsersModule from './components/UsersModule';
+import AuditModule from './components/AuditModule';
 
 type ViewType =
   | 'executive'
@@ -40,6 +51,7 @@ type ViewType =
   | 'marketing'
   | 'reports'
   | 'integrations'
+  | 'users'
   | 'audit';
 
 type NavItem = {
@@ -53,19 +65,15 @@ type NavItem = {
   adminOnly?: boolean;
 };
 
-/** What each unbuilt module still needs, so the placeholder is specific. */
-const NOT_BUILT: Partial<Record<ViewType, string>> = {
-  projects: 'Milestones, Gantt schedules, planned-versus-actual progress and daily site reports.',
-  boq: 'Bill of quantities, manpower and material costing, markup and quotation approval.',
-  finance: 'Invoices and receivables, expense tracking, budget monitoring and cash flow.',
-  hr: 'Employee records, certification tracking, recruitment and manpower allocation.',
-  hse: 'Risk assessments, method statements, inspection records and corrective actions.',
-  procurement: 'Supplier records, material requests, stock levels and quotation comparison.',
-  marketing: 'Content planning, SEO metadata, campaign drafts and lead analytics.',
-  reports: 'Scheduled daily, weekly and monthly reporting across the modules above.',
-  integrations: 'Connection health and consent controls for Gmail, Sheets and the AI gateway.',
-  audit: 'A durable, queryable audit trail of agent actions and human approvals.',
-};
+/**
+ * What an unbuilt module still needs, so its placeholder is specific rather
+ * than a generic "coming soon".
+ *
+ * Empty right now: every nav entry below resolves to a real view. It stays as
+ * the honest fallback — a nav item added without a view degrades into a screen
+ * that says so, instead of one implying work that does not exist.
+ */
+const NOT_BUILT: Partial<Record<ViewType, string>> = {};
 
 export default function App() {
   const { account, loading, approved, isAdmin, signOut } = useAuth();
@@ -112,16 +120,17 @@ export default function App() {
     { id: 'email-center', icon: '📧', label: 'Email Center', built: true },
     { id: 'approval-inbox', icon: '✓', label: 'Approvals', badge: pendingApprovals, built: true },
     { id: 'access', icon: '🔐', label: 'Access Requests', built: true, adminOnly: true },
-    { id: 'projects', icon: '🏗️', label: 'Projects', built: false },
-    { id: 'boq', icon: '🧮', label: 'BOQ & Quotes', built: false },
-    { id: 'finance', icon: '💰', label: 'Finance', built: false },
-    { id: 'hr', icon: '👥', label: 'HR & Training', built: false },
-    { id: 'hse', icon: '🛡️', label: 'HSE & Quality', built: false },
-    { id: 'procurement', icon: '📦', label: 'Procurement', built: false },
-    { id: 'marketing', icon: '📣', label: 'Marketing', built: false },
-    { id: 'reports', icon: '📈', label: 'Reports', built: false },
-    { id: 'integrations', icon: '🔌', label: 'Integrations', built: false },
-    { id: 'audit', icon: '📝', label: 'Audit Logs', built: false },
+    { id: 'projects', icon: '🏗️', label: 'Projects', built: true },
+    { id: 'boq', icon: '🧮', label: 'BOQ & Quotes', built: true },
+    { id: 'finance', icon: '💰', label: 'Finance', built: true },
+    { id: 'hr', icon: '👥', label: 'HR & Training', built: true },
+    { id: 'hse', icon: '🛡️', label: 'HSE & Quality', built: true },
+    { id: 'procurement', icon: '📦', label: 'Procurement', built: true },
+    { id: 'marketing', icon: '📣', label: 'Marketing', built: true },
+    { id: 'reports', icon: '📈', label: 'Reports', built: true },
+    { id: 'integrations', icon: '🔌', label: 'Integrations', built: true },
+    { id: 'users', icon: '🪪', label: 'Users', built: true },
+    { id: 'audit', icon: '📝', label: 'Audit Logs', built: true },
   ].filter((item) => !item.adminOnly || isAdmin) as NavItem[];
 
   const current = navigationItems.find((item) => item.id === currentView);
@@ -154,6 +163,28 @@ export default function App() {
         return <ApprovalInbox />;
       case 'access':
         return <AccessApprovals />;
+      case 'projects':
+        return <ProjectsModule />;
+      case 'boq':
+        return <BOQModule />;
+      case 'finance':
+        return <FinanceModule />;
+      case 'hr':
+        return <HRModule />;
+      case 'hse':
+        return <HSEModule />;
+      case 'procurement':
+        return <ProcurementModule />;
+      case 'marketing':
+        return <MarketingModule />;
+      case 'reports':
+        return <ReportsModule />;
+      case 'integrations':
+        return <IntegrationsModule />;
+      case 'users':
+        return <UsersModule />;
+      case 'audit':
+        return <AuditModule />;
       default:
         return (
           <div className="flex items-start justify-center pt-10">
@@ -169,8 +200,7 @@ export default function App() {
                   'This module has not been implemented in this build.'}
               </p>
               <p className="text-[10px] text-slate-500 mt-4 leading-relaxed">
-                Nothing is shown here rather than showing numbers that are not real. The
-                modules already working are marked without a dot in the sidebar.
+                Nothing is shown here rather than showing numbers that are not real.
               </p>
             </div>
           </div>
@@ -262,12 +292,28 @@ export default function App() {
               <p className="text-xs text-slate-400">
                 {currentView === 'executive' && 'Strategic overview and executive decision support'}
                 {currentView === 'office' && 'The floor, who is at which desk, and the room inventory'}
+                {currentView === 'workforce' && 'Real-time AI workforce monitoring and control'}
                 {currentView === 'collaboration' && 'Hand-offs and messages between departments'}
+                {currentView === 'assistant' && 'Conversational AI command interface'}
+                {currentView === 'knowledge' && 'Company document and knowledge management'}
+                {currentView === 'workflows' && 'Automated business workflow management'}
+                {currentView === 'crm' && 'Sales pipeline and customer relationship management'}
                 {currentView === 'staff-directory' && 'AI workforce management and performance'}
                 {currentView === 'task-monitor' && 'Task tracking and coordination'}
                 {currentView === 'email-center' && 'Company email integration and management'}
                 {currentView === 'approval-inbox' && 'Review and approve critical business actions'}
                 {currentView === 'access' && 'Approve or decline people asking to join your company'}
+                {currentView === 'projects' && 'Project management and progress tracking'}
+                {currentView === 'boq' && 'Bill of quantities and quotation management'}
+                {currentView === 'finance' && 'Financial management and cash flow tracking'}
+                {currentView === 'hr' && 'Human resources and employee management'}
+                {currentView === 'hse' && 'Health, safety, and quality compliance'}
+                {currentView === 'procurement' && 'Procurement and inventory management'}
+                {currentView === 'marketing' && 'Marketing campaigns and analytics'}
+                {currentView === 'reports' && 'Business reports and analytics'}
+                {currentView === 'integrations' && 'System integrations and connections'}
+                {currentView === 'users' && 'Directory of people, separate from who can sign in'}
+                {currentView === 'audit' && 'System audit trail and compliance logs'}
               </p>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
