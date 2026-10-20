@@ -176,6 +176,86 @@ try {
   await page.screenshot({ path: `${SHOT_DIR}/02-virtual-office.png`, fullPage: true });
   await floor.screenshot({ path: `${SHOT_DIR}/03-floor.png` });
 
+  /* ── 6b. a company creates its own agent ──────────────────────── */
+  console.log('\nAgents of your own');
+  await page.getByRole('button', { name: /AI Staff/ }).click();
+  await page.waitForTimeout(400);
+
+  const staffText = await page.locator('body').innerText();
+  check('an owner is offered the agent builder', /Add an agent/i.test(staffText));
+  check(
+    'the reference roster is described as the shipped set, not as yours',
+    /reference set that ships with the build/i.test(staffText)
+  );
+
+  await page.getByRole('button', { name: '+ Add an agent' }).click();
+  await page.waitForTimeout(300);
+
+  // Refuse an agent with no tools granted.
+  await page.locator('#ag-name').fill('VERTEX');
+  await page.locator('#ag-title').fill('Rope Access Scheduler');
+  await page
+    .locator('#ag-desc')
+    .fill('Plans the weekly rope-access crews against confirmed job dates and certification expiry.');
+  await page.getByRole('button', { name: /Add to / }).click();
+  await page.waitForTimeout(300);
+  const noToolsMsg = await page.locator('[role=alert]').innerText().catch(() => '');
+  check('an agent with no tools granted is refused', /at least one tool/i.test(noToolsMsg), noToolsMsg);
+
+  // Approval level should follow from what is granted.
+  const readLevel = await page.locator('text=/Approval level \\d/').first().innerText();
+  check('read-only grants sit at approval level 1', /level 1/i.test(readLevel), readLevel);
+
+  await page.getByText('Read projects', { exact: false }).first().click();
+  await page.waitForTimeout(200);
+  await page.getByText('Write the schedule', { exact: false }).first().click();
+  await page.waitForTimeout(250);
+  const writeLevel = await page.locator('text=/Approval level \\d/').first().innerText();
+  check('granting a write raises the approval level', /level 3/i.test(writeLevel), writeLevel);
+
+  await page.getByRole('button', { name: /Add to / }).click();
+  await page.waitForTimeout(600);
+
+  const afterCreate = await page.locator('body').innerText();
+  check('the agent is created for the company', /VERTEX was added to/i.test(afterCreate));
+  check('it appears in the directory', afterCreate.includes('Rope Access Scheduler'));
+  // The badge is uppercased in CSS, so innerText comes back as "YOURS".
+  check('it is marked as belonging to this company', /\byours\b/i.test(afterCreate));
+  check(
+    'a brand new agent shows no success rate rather than 0%',
+    /No runs/i.test(afterCreate),
+    'a new agent was given a numeric success score'
+  );
+
+  const vertexStored = await page.evaluate(() => localStorage.getItem('neas_custom_agents_v1'));
+  check('the agent is persisted, not just in component state', (vertexStored ?? '').includes('VERTEX'));
+  await page.screenshot({ path: `${SHOT_DIR}/07-agent-builder.png`, fullPage: true });
+
+  /* ── 6c. the email centre stops pretending ────────────────────── */
+  console.log('\nEmail Center honesty');
+  await page.getByRole('button', { name: /Email Center/ }).click();
+  await page.waitForTimeout(500);
+
+  const mailText = await page.locator('body').innerText();
+  check('it reports Gmail as not connected', /Gmail not connected/i.test(mailText));
+  check('it says the listed messages are sample data', /sample data, not your inbox/i.test(mailText));
+  check(
+    'it names the missing configuration',
+    /VITE_GOOGLE_CLIENT_ID/.test(mailText),
+    'the blocker was not named'
+  );
+  check(
+    'it no longer claims a recent sync',
+    !/2 minutes ago/i.test(mailText),
+    'a fabricated last-sync time is still shown'
+  );
+  check(
+    'it no longer asserts a connected company mailbox',
+    !/company\.info\.nextedgeaccesssolutions@gmail\.com/.test(mailText),
+    'an unauthorized address is still presented as connected'
+  );
+  await page.screenshot({ path: `${SHOT_DIR}/08-email-center.png`, fullPage: true });
+
   /* ── 7. a second person must be approved ──────────────────────── */
   console.log('\nApproval is required for everyone after the owner');
   const joinerCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
