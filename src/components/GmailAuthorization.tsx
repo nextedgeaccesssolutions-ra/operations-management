@@ -37,28 +37,50 @@ export default function GmailAuthorization() {
     setSuccessMessage(null);
 
     try {
-      const authorizedEmail = 'info.nextedgeaccesssolutions@gmail.com';
-      const result = await GmailService.startOAuthAuthorization(authorizedEmail);
+      const result = await GmailService.startOAuthAuthorization();
       
       if (result.success) {
-        // BLOCKED: Cannot complete OAuth in frontend-only mode
-        setError(
-          'Gmail OAuth authorization requires backend implementation. ' +
-          'The system cannot complete the OAuth flow without a backend proxy that handles: ' +
-          '(1) Google OAuth 2.0 callback, (2) secure token storage, (3) identity verification via Gmail API. ' +
-          'Please configure the backend Gmail integration before proceeding.'
+        setSuccessMessage(
+          `OAuth authorization initiated for info.nextedgeaccesssolutions@gmail.com. ` +
+          `Please complete the authorization in the Google popup window.`
         );
         
         orchestrationEngine.addAuditLog(
           'user',
           'CEO',
-          'gmail_authorization_blocked',
+          'gmail_authorization_started',
           'integration',
           'gmail',
-          'OAuth authorization blocked: backend implementation required',
-          'warning',
+          'OAuth authorization popup opened',
+          'info',
           { authorizationId: result.authorizationId }
         );
+
+        // Poll for authorization completion
+        const checkAuth = async () => {
+          const account = GmailService.getCurrentAccount();
+          if (account && account.connectionState === 'authorized') {
+            setSuccessMessage('Gmail account authorized and verified successfully.');
+            await loadGmailData();
+            return;
+          }
+          
+          const syncState = GmailService.getSyncState();
+          if (syncState.connectionState === 'identity_mismatch') {
+            setError('Identity mismatch: The authorized account does not match info.nextedgeaccesssolutions@gmail.com');
+            return;
+          }
+          
+          if (syncState.connectionState === 'failed') {
+            setError('Authorization failed. Please try again.');
+            return;
+          }
+          
+          // Continue polling
+          setTimeout(checkAuth, 1000);
+        };
+        
+        setTimeout(checkAuth, 1000);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start authorization');
@@ -99,6 +121,22 @@ export default function GmailAuthorization() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sync failed');
       console.error('[GmailAuthorization] Sync failed:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await GmailService.syncEmails(50);
+      await loadGmailData();
+      setSuccessMessage('Retry completed successfully.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Retry failed');
+      console.error('[GmailAuthorization] Retry failed:', err);
     } finally {
       setIsLoading(false);
     }
@@ -213,11 +251,11 @@ export default function GmailAuthorization() {
             </div>
           </div>
         ) : (
-          <div className="p-4 rounded-lg bg-amber-500/5 border border-amber-500/20 mb-4">
-            <p className="text-xs text-amber-400 font-medium mb-1">⚠️ Backend Configuration Required</p>
+          <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/20 mb-4">
+            <p className="text-xs text-blue-400 font-medium mb-1">ℹ️ Authorization Required</p>
             <p className="text-[10px] text-slate-300">
-              Gmail integration requires backend implementation to complete OAuth 2.0 authorization for info.nextedgeaccesssolutions@gmail.com.
-              The frontend cannot complete the OAuth flow without a backend proxy that handles token exchange and secure storage.
+              Click "Authorize Gmail" to start the OAuth 2.0 authorization flow for info.nextedgeaccesssolutions@gmail.com.
+              You will be redirected to Google to grant read-only access to your Gmail account.
             </p>
           </div>
         )}
@@ -277,21 +315,14 @@ export default function GmailAuthorization() {
         {/* Actions */}
         <div className="flex items-center gap-3 flex-wrap">
           {!account ? (
-            <div className="w-full p-4 rounded-lg bg-amber-500/5 border border-amber-500/20">
-              <p className="text-xs text-amber-400 font-medium mb-2">⚠️ Backend Implementation Required</p>
-              <p className="text-[10px] text-slate-300 mb-3">
-                Gmail OAuth authorization cannot be completed in frontend-only mode. The system requires:
-              </p>
-              <ul className="text-[10px] text-slate-400 space-y-1 mb-3">
-                <li>• Backend proxy endpoint for Google OAuth 2.0 callback</li>
-                <li>• Secure server-side token storage (never in localStorage)</li>
-                <li>• Gmail API integration for identity verification</li>
-                <li>• State/CSRF protection implementation</li>
-              </ul>
-              <p className="text-[10px] text-slate-500">
-                Current status: <span className="text-amber-400 font-medium">Awaiting Backend Configuration</span>
-              </p>
-            </div>
+            <button
+              onClick={handleStartAuthorization}
+              disabled={isLoading}
+              className="px-6 py-3 rounded-lg bg-gradient-to-r from-[#CA9332] to-[#EBC07E] text-white text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50"
+              aria-label="Authorize Gmail account"
+            >
+              {isLoading ? '⏳ Opening Google...' : '🔐 Authorize Gmail'}
+            </button>
           ) : (
             <>
               <button
@@ -305,7 +336,7 @@ export default function GmailAuthorization() {
               </button>
               {syncState?.status === 'error' && (
                 <button
-                  onClick={handleSync}
+                  onClick={handleRetry}
                   disabled={isLoading}
                   className="px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-medium hover:bg-amber-500/30 transition-all disabled:opacity-50"
                   aria-label="Retry failed sync"
