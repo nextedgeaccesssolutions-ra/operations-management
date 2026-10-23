@@ -1,0 +1,647 @@
+/**
+ * Google API Service for Gmail and Sheets Integration
+ * Requires OAuth Client ID to be configured
+ */
+
+// Configuration - OAuth Client ID from environment variables
+// NEVER hardcode credentials in source code
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+if (!GOOGLE_CLIENT_ID) {
+  console.warn('Google OAuth Client ID not configured. Set VITE_GOOGLE_CLIENT_ID in environment variables.');
+}
+
+const SCOPES = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.compose',
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+].join(' ');
+
+let tokenClient: any = null;
+let gapiInited = false;
+let gisInited = false;
+
+export interface GmailMessage {
+  id: string;
+  threadId: string;
+  snippet: string;
+  internalDate: string;
+  labelIds: string[];
+  payload: {
+    headers: Array<{ name: string; value: string }>;
+    body: {
+      size: number;
+      data?: string;
+    };
+  };
+}
+
+export interface Email {
+  id: string;
+  threadId: string;
+  from: string;
+  fromEmail: string;
+  to: string;
+  subject: string;
+  snippet: string;
+  body: string;
+  date: string;
+  labels: string[];
+  unread: boolean;
+}
+
+/**
+ * Dynamically load Google API scripts on-demand
+ */
+function loadGoogleScripts(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const loading = window.googleApiLoading;
+    
+    // If already loaded, resolve immediately
+    if (loading?.gapiLoaded && loading?.gisLoaded) {
+      console.log('[Google API] Scripts already loaded');
+      resolve();
+      return;
+    }
+    
+    console.log('[Google API] Loading Google API scripts dynamically...');
+    
+    let gapiLoaded = false;
+    let gisLoaded = false;
+    
+    const checkComplete = () => {
+      if (gapiLoaded && gisLoaded) {
+        if (window.googleApiLoading) {
+          window.googleApiLoading.gapiLoaded = true;
+          window.googleApiLoading.gisLoaded = true;
+        }
+        console.log('[Google API] ✓ All scripts loaded successfully');
+        resolve();
+      }
+    };
+    
+    // Load gapi script
+    const gapiScript = document.createElement('script');
+    gapiScript.src = 'https://apis.google.com/js/api.js';
+    gapiScript.async = true;
+    gapiScript.onload = () => {
+      console.log('[Google API] ✓ gapi script loaded');
+      gapiLoaded = true;
+      checkComplete();
+    };
+    gapiScript.onerror = (error) => {
+      console.error('[Google API] ✗ gapi script failed to load:', error);
+      reject(new Error('Failed to load Google API client library. Please check your internet connection and try again.'));
+    };
+    document.head.appendChild(gapiScript);
+    
+    // Load GIS script
+    const gisScript = document.createElement('script');
+    gisScript.src = 'https://accounts.google.com/gsi/client';
+    gisScript.async = true;
+    gisScript.onload = () => {
+      console.log('[Google API] ✓ GIS script loaded');
+      gisLoaded = true;
+      checkComplete();
+    };
+    gisScript.onerror = (error) => {
+      console.error('[Google API] ✗ GIS script failed to load:', error);
+      reject(new Error('Failed to load Google Identity Services. Please check your internet connection and try again.'));
+    };
+    document.head.appendChild(gisScript);
+    
+    // Timeout after 15 seconds
+    setTimeout(() => {
+      if (!gapiLoaded || !gisLoaded) {
+        reject(new Error('Google API scripts failed to load within 15 seconds. Please check your internet connection and refresh the page.'));
+      }
+    }, 15000);
+  });
+}
+
+/**
+ * Wait for Google API scripts to load
+ */
+function waitForScripts(maxWait: number = 10000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    
+    const checkScripts = () => {
+      // Check if scripts are available in the global scope (loaded from HTML head)
+      if (typeof gapi !== 'undefined' && typeof google !== 'undefined') {
+        console.log('[Google API] Scripts loaded successfully from HTML head');
+        if (window.googleApiLoading) {
+          window.googleApiLoading.gapiLoaded = true;
+          window.googleApiLoading.gisLoaded = true;
+        }
+        resolve();
+        return;
+      }
+      
+      // Check timeout
+      if (Date.now() - startTime > maxWait) {
+        reject(new Error('Google API scripts failed to load. Please refresh the page.'));
+        return;
+      }
+      
+      // Check again in 100ms
+      setTimeout(checkScripts, 100);
+    };
+    
+    checkScripts();
+  });
+}
+
+/**
+ * Initialize Google API client.
+ * CRITICAL: Must call gapi.load('client', callback) - the 'client' argument is REQUIRED
+ * to load the client library. Without it, gapi.client is undefined.
+ */
+export async function initializeGapi(): Promise<void> {
+  console.log('[Google API] Starting GAPI initialization...');
+  
+  // Wait for scripts to load
+  await waitForScripts();
+  
+  return new Promise((resolve, reject) => {
+    // Check if gapi is loaded
+    if (typeof gapi === 'undefined') {
+      console.error('[Google API] gapi is undefined');
+      reject(new Error('Google API library not loaded. Please refresh the page.'));
+      return;
+    }
+
+    console.log('[Google API] gapi exists, calling gapi.load("client", callback)...');
+
+    try {
+      // CRITICAL FIX: Must pass 'client' as first argument to load the client library
+      // Without 'client', gapi.client will be undefined
+      gapi.load('client', async () => {
+        console.log('[Google API] gapi.load callback executed');
+        
+        // Retry mechanism: gapi.client might not be immediately available
+        const maxRetries = 5;
+        let retryCount = 0;
+        
+        const checkClient = async () => {
+          retryCount++;
+          console.log(`[Google API] Checking gapi.client (attempt ${retryCount}/${maxRetries})...`);
+          console.log('[Google API] typeof gapi:', typeof gapi);
+          console.log('[Google API] typeof gapi.client:', typeof gapi?.client);
+          
+          if (gapi.client) {
+            console.log('[Google API] ✓ gapi.client is available');
+            
+            try {
+              console.log('[Google API] Calling gapi.client.init()...');
+              
+              // Initialize the client with discovery docs
+              await gapi.client.init({
+                discoveryDocs: [
+                  'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest',
+                  'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest',
+                ],
+              });
+              
+              console.log('[Google API] ✓ gapi.client.init() completed successfully');
+              gapiInited = true;
+              resolve();
+            } catch (error: any) {
+              console.error('[Google API] GAPI client init error:', error);
+              reject(new Error(error.message || 'Failed to initialize Google API client'));
+            }
+          } else if (retryCount < maxRetries) {
+            console.log('[Google API] gapi.client not ready yet, retrying in 200ms...');
+            setTimeout(checkClient, 200);
+          } else {
+            console.error('[Google API] ✗ gapi.client failed to initialize after', maxRetries, 'attempts');
+            reject(new Error('gapi.client failed to initialize after multiple attempts. The Google API client library did not load properly. Please refresh the page and try again. If the problem persists, check your internet connection and browser console for errors.'));
+          }
+        };
+        
+        // Start checking
+        checkClient();
+      });
+      
+      console.log('[Google API] gapi.load() called successfully, waiting for callback...');
+    } catch (error: any) {
+      console.error('[Google API] gapi.load error:', error);
+      reject(new Error(error.message || 'Failed to load Google API client'));
+    }
+  });
+}
+
+/**
+ * Check if gapi client is ready
+ */
+export function isGapiReady(): boolean {
+  return gapiInited && typeof gapi !== 'undefined' && gapi.client !== undefined;
+}
+
+/**
+ * Check if Google API scripts are loaded in the DOM
+ */
+export function isGoogleApiLoaded(): boolean {
+  // Check our loading flags first
+  const loading = window.googleApiLoading;
+  if (loading?.gapiLoaded && loading?.gisLoaded) {
+    return true;
+  }
+  
+  // Fallback: check if the globals exist (scripts may have loaded without firing onload)
+  return typeof gapi !== 'undefined' && typeof google !== 'undefined' && !!google.accounts;
+}
+
+/**
+ * Get the configured Client ID
+ */
+export function getConfiguredClientId(): string | undefined {
+  return GOOGLE_CLIENT_ID;
+}
+
+/**
+ * Check if Client ID is properly configured
+ */
+export function isClientIdConfigured(): boolean {
+  const clientId = getConfiguredClientId();
+  return !!clientId && clientId !== 'YOUR_CLIENT_ID_HERE' && clientId.includes('.apps.googleusercontent.com');
+}
+
+/**
+ * Initialize Google Identity Services (GIS)
+ */
+export function initializeGis(): Promise<void> {
+  return new Promise(async (resolve, reject) => {
+    console.log('[Google API] Initializing GIS...');
+    
+    // Wait for scripts to load
+    try {
+      await waitForScripts();
+    } catch (error: any) {
+      console.error('[Google API] Script loading failed:', error);
+      reject(error);
+      return;
+    }
+
+    // Check if Client ID is configured
+    if (!isClientIdConfigured()) {
+      console.error('[Google API] Client ID not configured');
+      reject(new Error('OAuth Client ID not configured. Please complete the Setup Wizard first.'));
+      return;
+    }
+
+    // Check if Google Identity Services is loaded
+    if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+      console.error('[Google API] Google Identity Services not loaded');
+      reject(new Error('Google Identity Services not loaded. Please refresh the page.'));
+      return;
+    }
+
+    try {
+      const clientId = getConfiguredClientId();
+      if (!clientId) {
+        reject(new Error('OAuth Client ID not configured'));
+        return;
+      }
+      
+      console.log('[Google API] Creating token client with Client ID:', clientId.substring(0, 20) + '...');
+      
+      // Initialize token client
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: SCOPES,
+        callback: (response: any) => {
+          console.log('[Google API] Token callback received:', response);
+          // This callback is called after each token request
+          if (response.error) {
+            console.error('[Google API] Token callback error:', response.error, response.error_description);
+          } else {
+            console.log('[Google API] Token received successfully');
+            gisInited = true;
+          }
+        },
+      });
+      
+      console.log('[Google API] Token client created successfully');
+      
+      // Mark as initialized (token client created successfully)
+      gisInited = true;
+      resolve();
+    } catch (error: any) {
+      console.error('[Google API] GIS init error:', error);
+      reject(new Error(error.message || 'Failed to initialize Google Identity Services'));
+    }
+  });
+}
+
+/**
+ * Request OAuth token - opens Google sign-in popup
+ */
+export function requestToken(): Promise<void> {
+  return new Promise(async (resolve, reject) => {
+    console.log('[Google API] Requesting OAuth token...');
+    
+    // Verify token client exists
+    if (!tokenClient) {
+      console.error('[Google API] Token client not initialized');
+      reject(new Error('Token client not initialized. Please refresh the page and try again.'));
+      return;
+    }
+
+    // Verify gapi.client exists before accessing it
+    if (typeof gapi === 'undefined' || !gapi.client) {
+      console.error('[Google API] gapi.client not available');
+      console.log('[Google API] typeof gapi:', typeof gapi);
+      console.log('[Google API] typeof gapi.client:', typeof gapi?.client);
+      reject(new Error('Google API client not ready. Please refresh the page and try again.'));
+      return;
+    }
+    
+    // Add a small delay to ensure gapi.client is fully ready
+    console.log('[Google API] Adding 200ms delay to ensure gapi.client is ready...');
+    await new Promise(r => setTimeout(r, 200));
+    
+    // Double-check gapi.client is still available after delay
+    if (typeof gapi === 'undefined' || !gapi.client) {
+      console.error('[Google API] gapi.client became unavailable after delay');
+      reject(new Error('Google API client became unavailable. Please refresh the page and try again.'));
+      return;
+    }
+
+    // Set up timeout
+    const timeoutId = setTimeout(() => {
+      console.error('[Google API] Token request timeout');
+      reject(new Error('Connection timeout. Please try again.'));
+    }, 60000);
+
+    // Override the callback for this specific request
+    tokenClient.callback = (response: any) => {
+      console.log('[Google API] Token request callback:', response);
+      clearTimeout(timeoutId);
+      
+      if (response.error) {
+        const errorMsg = response.error_description || response.error || 'Authentication failed';
+        console.error('[Google API] Token error:', errorMsg);
+        reject(new Error(errorMsg));
+      } else {
+        console.log('[Google API] Token received successfully');
+        // Token received successfully - set it on gapi.client
+        try {
+          gapi.client.setToken(response);
+          console.log('[Google API] Token set on gapi.client');
+        } catch (e) {
+          console.warn('[Google API] Failed to set token on gapi.client:', e);
+        }
+        resolve();
+      }
+    };
+
+    try {
+      // Check if we already have a token
+      let currentToken = null;
+      try {
+        currentToken = gapi.client.getToken();
+        console.log('[Google API] Current token:', currentToken ? 'exists' : 'null');
+      } catch (e) {
+        console.log('[Google API] getToken() threw error, treating as null');
+        currentToken = null;
+      }
+      
+      console.log('[Google API] Calling requestAccessToken...');
+      
+      if (currentToken === null) {
+        console.log('[Google API] Requesting new token with consent prompt');
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+      } else {
+        console.log('[Google API] Requesting token without prompt (existing token)');
+        tokenClient.requestAccessToken({ prompt: '' });
+      }
+      
+      console.log('[Google API] requestAccessToken called successfully');
+    } catch (error: any) {
+      console.error('[Google API] Error calling requestAccessToken:', error);
+      clearTimeout(timeoutId);
+      reject(new Error(error.message || 'Failed to request access token'));
+    }
+  });
+}
+
+/**
+ * Check if user is authenticated
+ */
+export function isAuthenticated(): boolean {
+  try {
+    return gapiInited && 
+           gisInited && 
+           typeof gapi !== 'undefined' && 
+           gapi.client !== undefined && 
+           gapi.client.getToken() !== null;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Sign out
+ */
+export function signOut(): void {
+  try {
+    if (typeof gapi === 'undefined' || !gapi.client) {
+      return;
+    }
+    
+    const token = gapi.client.getToken();
+    if (token && typeof google !== 'undefined' && google.accounts?.oauth2) {
+      google.accounts.oauth2.revoke(token.access_token);
+    }
+    gapi.client.setToken('');
+    gisInited = false;
+  } catch (e) {
+    console.warn('Error during sign out:', e);
+  }
+}
+
+/**
+ * Fetch emails from Gmail
+ */
+export async function fetchEmails(
+  maxResults: number = 50,
+  query: string = ''
+): Promise<Email[]> {
+  try {
+    if (typeof gapi === 'undefined' || !gapi.client?.gmail) {
+      throw new Error('Gmail API not ready');
+    }
+
+    const response = await gapi.client.gmail.users.messages.list({
+      userId: 'me',
+      maxResults,
+      q: query,
+    });
+
+    const messages = response.result.messages || [];
+    const emails: Email[] = [];
+
+    for (const msg of messages) {
+      const detail = await gapi.client.gmail.users.messages.get({
+        userId: 'me',
+        id: msg.id,
+      });
+
+      const message = detail.result;
+      const headers = message.payload.headers;
+
+      const from = headers.find((h: any) => h.name === 'From')?.value || '';
+      const to = headers.find((h: any) => h.name === 'To')?.value || '';
+      const subject = headers.find((h: any) => h.name === 'Subject')?.value || '(no subject)';
+      const date = headers.find((h: any) => h.name === 'Date')?.value || '';
+
+      // Extract email body
+      let body = '';
+      if (message.payload.body?.data) {
+        body = atob(message.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+      } else if (message.payload.parts) {
+        for (const part of message.payload.parts) {
+          if (part.mimeType === 'text/plain' && part.body?.data) {
+            body = atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+            break;
+          }
+        }
+      }
+
+      // Extract sender email
+      const fromMatch = from.match(/<(.+)>/);
+      const fromEmail = fromMatch ? fromMatch[1] : from;
+
+      emails.push({
+        id: message.id,
+        threadId: message.threadId,
+        from,
+        fromEmail,
+        to,
+        subject,
+        snippet: message.snippet || '',
+        body,
+        date,
+        labels: message.labelIds || [],
+        unread: message.labelIds?.includes('UNREAD') || false,
+      });
+    }
+
+    return emails;
+  } catch (error) {
+    console.error('Error fetching emails:', error);
+    throw error;
+  }
+}
+
+/**
+ * Send an email via Gmail API
+ */
+export async function sendEmail(
+  to: string,
+  subject: string,
+  body: string,
+  threadId?: string
+): Promise<void> {
+  try {
+    if (typeof gapi === 'undefined' || !gapi.client?.gmail) {
+      throw new Error('Gmail API not ready');
+    }
+
+    // Create email message
+    const email = [
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset="UTF-8"',
+      '',
+      body,
+    ].join('\n');
+
+    // Encode to base64url
+    const encodedEmail = btoa(email)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    const request = {
+      raw: encodedEmail,
+      ...(threadId && { threadId }),
+    };
+
+    await gapi.client.gmail.users.messages.send({
+      userId: 'me',
+      resource: request,
+    });
+  } catch (error) {
+    console.error('Error sending email:', error);
+    throw error;
+  }
+}
+
+/**
+ * Mark email as read
+ */
+export async function markAsRead(messageId: string): Promise<void> {
+  try {
+    if (typeof gapi === 'undefined' || !gapi.client?.gmail) {
+      throw new Error('Gmail API not ready');
+    }
+
+    await gapi.client.gmail.users.messages.modify({
+      userId: 'me',
+      id: messageId,
+      resource: {
+        removeLabelIds: ['UNREAD'],
+      },
+    });
+  } catch (error) {
+    console.error('Error marking as read:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch data from Google Sheets
+ */
+export async function fetchSheetData(
+  spreadsheetId: string,
+  range: string = 'A1:Z1000'
+): Promise<any[][]> {
+  try {
+    if (typeof gapi === 'undefined' || !gapi.client?.sheets) {
+      throw new Error('Sheets API not ready');
+    }
+
+    const response = await gapi.client.sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range,
+    });
+
+    return response.result.values || [];
+  } catch (error) {
+    console.error('Error fetching sheet ', error);
+    throw error;
+  }
+}
+
+/**
+ * Get authenticated user's email
+ */
+export async function getUserEmail(): Promise<string> {
+  try {
+    if (typeof gapi === 'undefined' || !gapi.client?.gmail) {
+      throw new Error('Gmail API not ready');
+    }
+
+    const response = await gapi.client.gmail.users.getProfile({
+      userId: 'me',
+    });
+    return response.result.emailAddress;
+  } catch (error) {
+    console.error('Error getting user email:', error);
+    throw error;
+  }
+}

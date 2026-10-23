@@ -73,11 +73,6 @@ export default function AuthPage() {
     setLoading(false);
   };
 
-  const fillDemo = () => {
-    setLoginEmail('demo@neas.co');
-    setLoginPassword('demo123');
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center floor-grid relative overflow-hidden">
       {/* Background decoration */}
@@ -178,18 +173,6 @@ export default function AuthPage() {
                   'Log In'
                 )}
               </button>
-
-              {/* Demo credentials */}
-              <div className="pt-2 border-t border-slate-700/30">
-                <p className="text-[10px] text-slate-500 text-center mb-2">Quick access</p>
-                <button
-                  type="button"
-                  onClick={fillDemo}
-                  className="w-full py-2 rounded-lg bg-slate-800/40 border border-slate-700/30 text-xs text-slate-400 hover:text-slate-300 hover:border-slate-600/50 transition-all flex items-center justify-center gap-2"
-                >
-                  <span>🔑</span> Use demo credentials
-                </button>
-              </div>
             </form>
           )}
 

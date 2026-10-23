@@ -66,30 +66,11 @@ function saveSession(user: User | null) {
   }
 }
 
-// Seed a demo account on first load
-function seedDemoAccount() {
-  const accounts = getStoredAccounts();
-  if (!accounts.find(a => a.user.email === 'demo@neas.co')) {
-    const demoUser: User = {
-      id: generateId(),
-      name: 'Demo User',
-      email: 'demo@neas.co',
-      company: 'Next Edge Access Solutions',
-      role: 'Administrator',
-      avatar: '🧑‍💼',
-      createdAt: new Date().toISOString(),
-    };
-    accounts.push({ user: demoUser, password: 'demo123' });
-    saveAccounts(accounts);
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    seedDemoAccount();
     const session = getStoredSession();
     if (session) setUser(session);
     setLoading(false);
